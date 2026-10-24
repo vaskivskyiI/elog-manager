@@ -20,6 +20,12 @@ services:
     # Share the host's process list so the manager can find and signal elogd.
     # If elogd runs in this compose project instead, use  pid: "service:elogd"
     pid: host
+    # Docker's default AppArmor profile only lets a container signal processes in
+    # other containers, so SIGHUP to the host's elogd is refused even for the same
+    # user. The container still runs as ELOG_UID without extra capabilities.
+    # On SELinux hosts (Fedora/RHEL) use "label=disable" instead.
+    security_opt:
+      - apparmor=unconfined
     ports:
       - "127.0.0.1:${ELOGMGR_PORT:-8090}:8090"
     volumes:

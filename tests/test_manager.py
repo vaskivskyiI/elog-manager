@@ -300,6 +300,16 @@ def test_write_falls_back_to_in_place(client, monkeypatch):
     assert "comment = written in place" in (client.tmp / "elogd.cfg").read_text(encoding="utf-8")
 
 
+def test_reload_refusal_is_explained():
+    from elogmgr.reload import denied_message
+    msg = denied_message(74359, (1000, 1000, 1000), 1000, "docker-default (enforce)")
+    assert "AppArmor" in msg and "apparmor=unconfined" in msg
+    msg = denied_message(74359, (0, 1000, 0), 1000, "unconfined")  # elogd changed only its effective uid
+    assert "real uid 0" in msg
+    msg = denied_message(74359, (1001, 1001, 1001), 1000, "")
+    assert "uid 1001" in msg and "ELOG_UID" in msg
+
+
 def test_rename_keeps_data_dir(client):
     login(client, "alice")
     st = client.get("/api/state").json

@@ -59,7 +59,53 @@ def reload_elogd(settings: dict) -> dict:
         except ProcessLookupError:
             pass
     if denied:
-        return {"ok": False, "message": f"Not allowed to signal elogd (pid {', '.join(map(str, denied))}). "
-                                        "Run the manager as the elogd user, or set ELOGMGR_RELOAD=command "
-                                        "with 'sudo -n /usr/bin/killall -HUP elogd'."}
+        return {"ok": False, "message": denied_message(denied[0], _proc_uids(denied[0]), os.getuid(),
+                                                       _apparmor_profile())}
     return {"ok": True, "message": "elogd reloaded"}
+
+
+def _proc_uids(pid: int) -> tuple[int, int, int] | None:
+    """(real, effective, saved) uid of a process, from /proc/<pid>/status."""
+    try:
+        with open(f"/proc/{pid}/status", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Uid:"):
+                    real, eff, saved = (int(x) for x in line.split()[1:4])
+                    return real, eff, saved
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _apparmor_profile() -> str:
+    try:
+        with open("/proc/self/attr/current", encoding="utf-8") as f:
+            return f.read().strip().strip("\x00")
+    except OSError:
+        return ""
+
+
+def denied_message(pid: int, target: tuple[int, int, int] | None, me: int, apparmor: str) -> str:
+    """Explain why the kernel refused SIGHUP and what to change."""
+    head = f"Not allowed to signal elogd (pid {pid}). "
+    if target and me in (target[0], target[2]):
+        # Same user, so the uid check passed: a security module refused it.
+        if apparmor and apparmor != "unconfined":
+            return head + (f"The manager runs as the same user (uid {me}), but its AppArmor profile "
+                           f"'{apparmor.split()[0]}' blocks signals to processes outside the container. "
+                           "Add 'security_opt: [apparmor=unconfined]' to docker-compose.yml.")
+        return head + (f"The manager runs as the same user (uid {me}), so a security module (SELinux or "
+                       "AppArmor) refused it. In Docker add 'security_opt: [label=disable]' or "
+                       "'[apparmor=unconfined]'.")
+    if target:
+        real, eff, saved = target
+        if real != eff:
+            return head + (f"elogd runs with real uid {real} but effective uid {eff}; the kernel checks the "
+                           f"real uid, so only uid {real} may signal it (the manager is uid {me}). Start elogd "
+                           "as the elog user (e.g. User= in its systemd unit), or set ELOGMGR_RELOAD=command "
+                           "with 'sudo -n /usr/bin/killall -HUP elogd'.")
+        return head + (f"elogd runs as uid {real}, the manager as uid {me}. Run the manager as uid {real} "
+                       "(ELOG_UID in .env), or set ELOGMGR_RELOAD=command with "
+                       "'sudo -n /usr/bin/killall -HUP elogd'.")
+    return head + ("Run the manager as the elogd user, or set ELOGMGR_RELOAD=command with "
+                   "'sudo -n /usr/bin/killall -HUP elogd'.")

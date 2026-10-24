@@ -149,8 +149,14 @@ running across reboots.
   cannot write.
 * `pid: host` lets the manager see elogd and send it `SIGHUP`. Because the
   container runs as a non-root user, it can only signal processes of that same
-  user. If elogd runs in the same compose project instead, use
-  `pid: "service:elogd"`.
+  user. Docker's default AppArmor profile also blocks signals from a container
+  to processes outside Docker, so the compose file sets
+  `security_opt: [apparmor=unconfined]` for this container; on SELinux hosts use
+  `label=disable` instead. If elogd runs in the same compose project, use
+  `pid: "service:elogd"` and drop both.
+* If reloading still fails, the save message says why: a different user, an
+  elogd that switched only its effective user (its real user is still root), or
+  a security module.
 * The port is published on 127.0.0.1 only. Serve it through your HTTPS reverse
   proxy (see *Reverse proxy* below). Over plain `http://`, sign-in does not
   work unless `ELOGMGR_BEHIND_PROXY=0`.
