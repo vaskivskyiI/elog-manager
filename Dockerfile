@@ -7,6 +7,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY elogmgr ./elogmgr
+# State (backups, change log, session key). Sticky and world-writable because the
+# container runs as whatever uid owns elogd.cfg; docker-compose.yml mounts a volume here.
+RUN mkdir /state && chmod 1777 /state
+ENV ELOGMGR_STATE_DIR=/state
 
 # docker-compose.yml overrides this with the uid/gid that owns elogd.cfg
 USER 1000:1000

@@ -90,7 +90,7 @@ Compose, systemd and `python -m elogmgr` all read. See `.env.example`:
 | `ELOGD_CFG` | `$ELOG_DIR/elogd.cfg` | If the file has another name |
 | `ELOG_UID`, `ELOG_GID` | 1000 | Docker only: the account elogd runs as |
 | `ELOGMGR_PORT` | 8090 | Port on 127.0.0.1 |
-| `ELOGMGR_STATE_DIR` | `<dir of elogd.cfg>/elog-manager` | Backups, audit log and the session key (created on first start) |
+| `ELOGMGR_STATE_DIR` | Docker: the `state` volume; systemd: `/var/lib/elog-manager`; otherwise `<dir of elogd.cfg>/elog-manager` | Backups, change log and the session key. Must be writable by the account the manager runs as |
 | `ELOGMGR_RELOAD` | `signal` | `signal`, `command` or `none` (see *Applying changes*) |
 | `ELOGMGR_RELOAD_COMMAND` | | Used with `ELOGMGR_RELOAD=command` |
 | `ELOGMGR_BEHIND_PROXY` | `1` | Behind an HTTPS proxy: secure cookies, client IPs from `X-Forwarded-For`. Use `0` only for plain-http testing |
@@ -139,9 +139,14 @@ running across reboots.
 * The ELOG directory is mounted at the **same path** inside the container, so
   paths in `elogd.cfg` resolve the same way. If `passwords.pwd` or the state
   directory live elsewhere, add volumes for them in `docker-compose.yml`.
-* The container needs write access to `elogd.cfg` and the state directory. If
-  the directory holding `elogd.cfg` is not writable, the file is rewritten in
-  place instead of being replaced atomically; the backup is still taken first.
+* Backups, the change log and the session key go into the `state` volume
+  (`docker compose exec elog-manager ls /state/backups`). The container needs
+  write access to `elogd.cfg` itself. If the directory holding it is not
+  writable, the file is rewritten in place instead of being replaced
+  atomically; the backup is still taken first.
+* At startup the manager checks these paths and stops with a message saying
+  what to fix, for example a missing `elogd.cfg` or a state directory it
+  cannot write.
 * `pid: host` lets the manager see elogd and send it `SIGHUP`. Because the
   container runs as a non-root user, it can only signal processes of that same
   user. If elogd runs in the same compose project instead, use

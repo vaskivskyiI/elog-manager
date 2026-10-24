@@ -11,6 +11,9 @@ services:
     image: elog-manager:latest
     restart: unless-stopped
     env_file: .env
+    environment:
+      # backups, change log and session key live in the "state" volume
+      ELOGMGR_STATE_DIR: /state
     # Same uid/gid as elogd ("Usr"/"Grp" in elogd.cfg): needed to write elogd.cfg
     # and to send elogd the reload signal (SIGHUP).
     user: "${ELOG_UID:-1000}:${ELOG_GID:-1000}"
@@ -21,5 +24,9 @@ services:
       - "127.0.0.1:${ELOGMGR_PORT:-8090}:8090"
     volumes:
       - ${ELOG_DIR:-/usr/local/elog}:${ELOG_DIR:-/usr/local/elog}
-      # Mount more directories if passwords.pwd or ELOGMGR_STATE_DIR live elsewhere, e.g.
+      - state:/state
+      # Mount more directories if passwords.pwd lives outside ELOG_DIR, e.g.
       # - /mnt/elog_data:/mnt/elog_data
+
+volumes:
+  state:

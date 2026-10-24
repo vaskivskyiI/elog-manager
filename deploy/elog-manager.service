@@ -8,6 +8,9 @@ After=network.target elogd.service
 User=elog
 Group=elog
 WorkingDirectory=/opt/elog-manager
+# systemd creates /var/lib/elog-manager owned by User= (backups, change log, session key)
+StateDirectory=elog-manager
+Environment=ELOGMGR_STATE_DIR=/var/lib/elog-manager
 EnvironmentFile=/opt/elog-manager/.env
 ExecStart=/opt/elog-manager/venv/bin/python -m elogmgr
 Restart=on-failure

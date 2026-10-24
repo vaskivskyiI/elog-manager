@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -14,7 +15,7 @@ from .elogcfg import ElogConfig, Line, join_list, norm
 from .lint import author_problem, ensure_author, lint
 from .options import COMMON, catalog
 from .reload import reload_elogd
-from .settings import from_env, load_env_file, secret_key
+from .settings import SetupError, check_paths, from_env, load_env_file, secret_key
 from .store import ConflictError, Store, unified_diff
 from .templates import PREFIX as TEMPLATE_PREFIX, TEMPLATES, builtin
 
@@ -34,6 +35,8 @@ class OpError(Exception):
 def create_app(settings: dict | None = None) -> Flask:
     settings = settings or from_env()
     store = Store(settings)
+    for warning in check_paths(store.cfg_path, store.state_dir):
+        print("WARNING:", warning, file=sys.stderr, flush=True)
     cfg0, _ = store.load()
     try:  # ELOG's own session length, in hours
         session_hours = float(cfg0.global_.get("Login expiration") or 12)
@@ -496,7 +499,10 @@ def main():
     if env_file:
         load_env_file(env_file)
     s = from_env()
-    app = create_app(s)
+    try:
+        app = create_app(s)
+    except SetupError as e:
+        sys.exit(f"ELOG Manager cannot start: {e}")
     host, port = a.host or s["host"], a.port or s["port"]
     try:
         from waitress import serve

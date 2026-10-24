@@ -65,6 +65,35 @@ def from_env() -> dict:
     }
 
 
+class SetupError(Exception):
+    """A configuration problem the operator has to fix; shown without a traceback."""
+
+
+def check_paths(cfg_path: str, state_dir: str) -> list[str]:
+    """Fail early with an actionable message; return warnings for problems that only matter on save."""
+    user = f"uid {os.getuid()}" if hasattr(os, "getuid") else "this user"
+    if not os.path.isfile(cfg_path):
+        raise SetupError(f"elogd.cfg not found at {cfg_path}. Set ELOG_DIR (or ELOGD_CFG) in .env"
+                         " and, in Docker, mount that directory.")
+    try:
+        os.makedirs(state_dir, exist_ok=True)
+        probe = os.path.join(state_dir, ".write-test")
+        with open(probe, "w", encoding="utf-8"):
+            pass
+        os.unlink(probe)
+    except OSError as e:
+        raise SetupError(
+            f"State directory {state_dir} is not writable for {user} ({e.strerror}). It holds backups, the "
+            f"change log and the session key. Either create it for that user:\n"
+            f"    sudo install -d -o elog -g elog {state_dir}\n"
+            f"or set ELOGMGR_STATE_DIR in .env to a directory that user can write.") from None
+    warnings = []
+    if not os.access(cfg_path, os.W_OK):
+        warnings.append(f"{cfg_path} is not writable for {user}: saving will fail. Run the manager as the "
+                        "account that owns elogd.cfg (in Docker: ELOG_UID/ELOG_GID in .env).")
+    return warnings
+
+
 def secret_key(state_dir: str) -> str:
     """Session signing key, created once and kept in the state directory."""
     path = os.path.join(state_dir, "secret_key")

@@ -239,6 +239,20 @@ def test_names_are_unique_and_series_continue(client):
     assert r.status_code == 400 and "already exists" in r.json["error"]
 
 
+def test_startup_explains_unwritable_state_dir(tmp_path, monkeypatch):
+    from elogmgr.settings import SetupError
+    shutil.copy(REF, tmp_path / "elogd.cfg")
+    with pytest.raises(SetupError, match="not found"):
+        create_app({"elogd_cfg": str(tmp_path / "missing.cfg"), "state_dir": str(tmp_path / "s")})
+
+    def denied(path, *a, **kw):
+        raise PermissionError(13, "Permission denied", path)
+    monkeypatch.setattr(os, "makedirs", denied)
+    with pytest.raises(SetupError) as e:
+        create_app({"elogd_cfg": str(tmp_path / "elogd.cfg")})
+    assert "sudo install -d -o elog -g elog" in str(e.value) and "ELOGMGR_STATE_DIR" in str(e.value)
+
+
 def test_env_settings(tmp_path, monkeypatch):
     from elogmgr.settings import from_env, load_env_file
     (tmp_path / ".env").write_text("ELOG_DIR=elog\nELOGMGR_BEHIND_PROXY=0\nELOGMGR_RELOAD=none\n", encoding="utf-8")
