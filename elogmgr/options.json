@@ -1,0 +1,1472 @@
+[
+ {
+  "name": "Port",
+  "spec": "<port>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#port-port",
+  "default": null
+ },
+ {
+  "name": "SSL",
+  "spec": "<0 | 1>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#ssl-0-1",
+  "default": null
+ },
+ {
+  "name": "Interface",
+  "spec": "<interface>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#interface-interface",
+  "default": null
+ },
+ {
+  "name": "Resource dir",
+  "spec": "<directory>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#resource-dir-directory",
+  "default": null
+ },
+ {
+  "name": "Logbook dir",
+  "spec": "<directory>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#logbook-dir-directory",
+  "default": null
+ },
+ {
+  "name": "Language",
+  "spec": "<name>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#language-name",
+  "default": null
+ },
+ {
+  "name": "charset",
+  "spec": "<name>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#charset-name",
+  "default": null
+ },
+ {
+  "name": "Logbook Tabs",
+  "spec": "[0|1]",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#logbook-tabs-01",
+  "default": null
+ },
+ {
+  "name": "Main Tab",
+  "spec": "<string>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#main-tab-string",
+  "default": null
+ },
+ {
+  "name": "Main Tab URL",
+  "spec": "<string>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#main-tab-url-string",
+  "default": null
+ },
+ {
+  "name": "Welcome Title",
+  "spec": "<html code>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#welcome-title-html-code",
+  "default": null
+ },
+ {
+  "name": "Page title",
+  "spec": "<string>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#page-title-string",
+  "default": null
+ },
+ {
+  "name": "List page title",
+  "spec": "<string>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#list-page-title-string",
+  "default": null
+ },
+ {
+  "name": "Selection page",
+  "spec": "<file>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#selection-page-file",
+  "default": null
+ },
+ {
+  "name": "Guest Selection page",
+  "spec": "<file>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#guest-selection-page-file",
+  "default": null
+ },
+ {
+  "name": "Protect Selection page",
+  "spec": "0 | 1",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#protect-selection-page-0-1",
+  "default": null
+ },
+ {
+  "name": "Expand Selection page",
+  "spec": "0 | 1'",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#expand-selection-page-0-1",
+  "default": null
+ },
+ {
+  "name": "SMTP host",
+  "spec": "<host.domain>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#smtp-host-hostdomain",
+  "default": null
+ },
+ {
+  "name": "SMTP username",
+  "spec": "<username>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#smtp-username-username",
+  "default": null
+ },
+ {
+  "name": "SMTP port",
+  "spec": "<port>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#smtp-port-port",
+  "default": "25"
+ },
+ {
+  "name": "Logfile",
+  "spec": "<file>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#logfile-file",
+  "default": null
+ },
+ {
+  "name": "Logging level",
+  "spec": "1 | 2 | 3",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#logging-level-1-2-3",
+  "default": null
+ },
+ {
+  "name": "URL",
+  "spec": "<http[s]://host.domain[:port]/[subdir/]>",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#url-httpshostdomainportsubdir",
+  "default": null
+ },
+ {
+  "name": "Relative redirection",
+  "spec": "0|1",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#relative-redirection-01",
+  "default": null
+ },
+ {
+  "name": "Resolve host names",
+  "spec": "0|1",
+  "section": "Global options",
+  "doc": "https://elog.psi.ch/elog/config.html#resolve-host-names-01",
+  "default": null
+ },
+ {
+  "name": "Data dir",
+  "spec": "<directory>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#data-dir-directory",
+  "default": null
+ },
+ {
+  "name": "Subdir",
+  "spec": "<directory>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#subdir-directory",
+  "default": null
+ },
+ {
+  "name": "Comment",
+  "spec": "<comment>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#comment-comment",
+  "default": null
+ },
+ {
+  "name": "Theme",
+  "spec": "<theme>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#theme-theme",
+  "default": null
+ },
+ {
+  "name": "CSS",
+  "spec": "<filename>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#css-filename",
+  "default": null
+ },
+ {
+  "name": "Title image",
+  "spec": "<string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#title-image-string",
+  "default": null
+ },
+ {
+  "name": "Title image URL",
+  "spec": "<URL>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#title-image-url-url",
+  "default": null
+ },
+ {
+  "name": "Time format",
+  "spec": "<string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#time-format-string",
+  "default": null
+ },
+ {
+  "name": "Time format <attribute>",
+  "spec": "<string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#time-format-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Date format",
+  "spec": "<string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#date-format-string",
+  "default": null
+ },
+ {
+  "name": "Date format <attribute>",
+  "spec": "<string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#date-format-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Welcome Page",
+  "spec": "<file>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#welcome-page-file",
+  "default": null
+ },
+ {
+  "name": "Start page",
+  "spec": "<command>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#start-page-command",
+  "default": null
+ },
+ {
+  "name": "Submit Page",
+  "spec": "<file>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#submit-page-file",
+  "default": null
+ },
+ {
+  "name": "Message comment",
+  "spec": "<comment>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#message-comment-comment",
+  "default": null
+ },
+ {
+  "name": "Reply comment",
+  "spec": "<comment>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#reply-comment-comment",
+  "default": null
+ },
+ {
+  "name": "Attachment comment",
+  "spec": "<comment>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#attachment-comment-comment",
+  "default": null
+ },
+ {
+  "name": "Menu commands",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#menu-commands-list",
+  "default": null
+ },
+ {
+  "name": "Copy to",
+  "spec": "<logbook list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#copy-to-logbook-list",
+  "default": null
+ },
+ {
+  "name": "Move to",
+  "spec": "<logbook list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#move-to-logbook-list",
+  "default": null
+ },
+ {
+  "name": "List Menu commands",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#list-menu-commands-list",
+  "default": null
+ },
+ {
+  "name": "Guest Menu commands",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#guest-menu-commands-list",
+  "default": null
+ },
+ {
+  "name": "Guest List Menu commands",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#guest-list-menu-commands-list",
+  "default": null
+ },
+ {
+  "name": "Menu text",
+  "spec": "<file>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#menu-text-file",
+  "default": null
+ },
+ {
+  "name": "List Menu text",
+  "spec": "<file>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#list-menu-text-file",
+  "default": null
+ },
+ {
+  "name": "Filter Menu text",
+  "spec": "<file>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#filter-menu-text-file",
+  "default": null
+ },
+ {
+  "name": "Guest Display",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#guest-display-list",
+  "default": null
+ },
+ {
+  "name": "Top text",
+  "spec": "<file> | <string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#top-text-file-string",
+  "default": null
+ },
+ {
+  "name": "Bottom text",
+  "spec": "<file> | <string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#bottom-text-file-string",
+  "default": null
+ },
+ {
+  "name": "Bottom text login",
+  "spec": "<file> | <string>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#bottom-text-login-file-string",
+  "default": null
+ },
+ {
+  "name": "Help URL",
+  "spec": "<URL>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#help-url-url",
+  "default": null
+ },
+ {
+  "name": "Message Width",
+  "spec": "<number>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#message-width-number",
+  "default": "76 (78 for replies"
+ },
+ {
+  "name": "Message Height",
+  "spec": "<number>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#message-height-number",
+  "default": "20"
+ },
+ {
+  "name": "Admin textarea",
+  "spec": "<cols>,<rows>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#admin-textarea-colsrows",
+  "default": null
+ },
+ {
+  "name": "Display mode",
+  "spec": "[full|summary|threaded]",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#display-mode-fullsummarythreaded",
+  "default": null
+ },
+ {
+  "name": "Entries per page",
+  "spec": "<number>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#entries-per-page-number",
+  "default": "20"
+ },
+ {
+  "name": "Restrict edit time",
+  "spec": "<hours>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#restrict-edit-time-hours",
+  "default": null
+ },
+ {
+  "name": "Admin restrict edit time",
+  "spec": "<hours>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#admin-restrict-edit-time-hours",
+  "default": null
+ },
+ {
+  "name": "Max content length",
+  "spec": "<bytes>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#max-content-length-bytes",
+  "default": "10485760 (= 10 MB"
+ },
+ {
+  "name": "Fonts",
+  "spec": "<list>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#fonts-list",
+  "default": null
+ },
+ {
+  "name": "All display limit",
+  "spec": "<n>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#all-display-limit-n",
+  "default": "500"
+ },
+ {
+  "name": "Thumbnail size",
+  "spec": "<size>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#thumbnail-size-size",
+  "default": null
+ },
+ {
+  "name": "Thumbnail options",
+  "spec": "<options>",
+  "section": "General options",
+  "doc": "https://elog.psi.ch/elog/config.html#thumbnail-options-options",
+  "default": null
+ },
+ {
+  "name": "Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#attributes-list",
+  "default": null
+ },
+ {
+  "name": "Options <attribute>",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#options-attribute-list",
+  "default": null
+ },
+ {
+  "name": "Extendable options",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#extendable-options-list",
+  "default": null
+ },
+ {
+  "name": "ROptions <attribute>",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#roptions-attribute-list",
+  "default": null
+ },
+ {
+  "name": "MOptions <attribute>",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#moptions-attribute-list",
+  "default": null
+ },
+ {
+  "name": "IOptions <attribute>",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#ioptions-attribute-list",
+  "default": null
+ },
+ {
+  "name": "Comment <attribute>",
+  "spec": "<comment>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#comment-attribute-comment",
+  "default": null
+ },
+ {
+  "name": "Tooltip <attribute>",
+  "spec": "<comment>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#tooltip-attribute-comment",
+  "default": null
+ },
+ {
+  "name": "Tooltip <attribute> <attribute option>",
+  "spec": "<comment>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#tooltip-attribute-attribute-option-comment",
+  "default": null
+ },
+ {
+  "name": "Icon comment <icon>",
+  "spec": "<comment>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#icon-comment-icon-comment",
+  "default": null
+ },
+ {
+  "name": "Options <attribute>",
+  "spec": "boolean",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#options-attribute-boolean",
+  "default": null
+ },
+ {
+  "name": "Preset <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Preset text",
+  "spec": "<string> or <file>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-text-string-or-file",
+  "default": null
+ },
+ {
+  "name": "Preset on edit <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-on-edit-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Preset on reply <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-on-reply-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Preset on first reply <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-on-first-reply-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Preset on duplicate <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#preset-on-duplicate-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Locked Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#locked-attributes-list",
+  "default": null
+ },
+ {
+  "name": "Fixed Attributes Edit",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#fixed-attributes-edit-list",
+  "default": null
+ },
+ {
+  "name": "Fixed Attributes Reply",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#fixed-attributes-reply-list",
+  "default": null
+ },
+ {
+  "name": "Required Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#required-attributes-list",
+  "default": null
+ },
+ {
+  "name": "Show Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#show-attributes-list",
+  "default": null
+ },
+ {
+  "name": "Show Attributes Edit",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#show-attributes-edit-list",
+  "default": null
+ },
+ {
+  "name": "Propagate Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#propagate-attributes-list",
+  "default": null
+ },
+ {
+  "name": "Page title",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#page-title-string_1",
+  "default": null
+ },
+ {
+  "name": "Edit Page title",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#edit-page-title-string",
+  "default": null
+ },
+ {
+  "name": "List display",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#list-display-list",
+  "default": "\\ List display = ID"
+ },
+ {
+  "name": "Guest List display",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#guest-list-display-list",
+  "default": null
+ },
+ {
+  "name": "Link display",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#link-display-list",
+  "default": null
+ },
+ {
+  "name": "Thread display",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#thread-display-string",
+  "default": null
+ },
+ {
+  "name": "Thread icon",
+  "spec": "<attribute>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#thread-icon-attribute",
+  "default": null
+ },
+ {
+  "name": "RSS Title",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#rss-title-string",
+  "default": null
+ },
+ {
+  "name": "RSS Entries",
+  "spec": "<n>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#rss-entries-n",
+  "default": null
+ },
+ {
+  "name": "Subst <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#subst-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Remove on reply",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#remove-on-reply-list",
+  "default": null
+ },
+ {
+  "name": "Quote on reply",
+  "spec": "0 | 1",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#quote-on-reply-0-1",
+  "default": null
+ },
+ {
+  "name": "Reply string",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#reply-string-string",
+  "default": null
+ },
+ {
+  "name": "Subst on reply <attribute >",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#subst-on-reply-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Subst on edit <attribute >",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#subst-on-edit-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Quick filter",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#quick-filter-list",
+  "default": null
+ },
+ {
+  "name": "Last default",
+  "spec": "<n>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#last-default-n",
+  "default": null
+ },
+ {
+  "name": "Format <attribute>",
+  "spec": "<flags>,<css_class_name>,<css_class_value>,<width>,<size>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#format-attribute-flagscss_class_namecss_class_valuewidthsize",
+  "default": null
+ },
+ {
+  "name": "Type <attribute>",
+  "spec": "date | datetime | numeric | userlist | useremail | muserlist | museremail",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#type-attribute-date-datetime-numeric-userlist-useremail-muserlist-museremail",
+  "default": null
+ },
+ {
+  "name": "Style <attribute> <value>",
+  "spec": "<style>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#style-attribute-value-style",
+  "default": null
+ },
+ {
+  "name": "Cell Style <attribute> <value>",
+  "spec": "<style>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#cell-style-attribute-value-style",
+  "default": null
+ },
+ {
+  "name": "Change <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#change-attribute-string",
+  "default": null
+ },
+ {
+  "name": "List Change <attribute>",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#list-change-attribute-string",
+  "default": null
+ },
+ {
+  "name": "Execute new | edit | delete",
+  "spec": "<command>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#execute-new-edit-delete-command",
+  "default": null
+ },
+ {
+  "name": "Last submission",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#last-submission-string",
+  "default": null
+ },
+ {
+  "name": "ID display",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#id-display-string",
+  "default": null
+ },
+ {
+  "name": "Prepend on reply",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#prepend-on-reply-string",
+  "default": null
+ },
+ {
+  "name": "Append on reply",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#append-on-reply-string",
+  "default": null
+ },
+ {
+  "name": "Prepend on edit",
+  "spec": "<string>**",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#prepend-on-edit-string",
+  "default": null
+ },
+ {
+  "name": "Append on edit",
+  "spec": "<string>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#append-on-edit-string",
+  "default": null
+ },
+ {
+  "name": "Sort Attributes",
+  "spec": "<list>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#sort-attributes-list",
+  "default": null
+ },
+ {
+  "name": "Show Attributes Edit",
+  "spec": "<list>",
+  "section": "Conditional attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#show-attributes-edit-list_1",
+  "default": null
+ },
+ {
+  "name": "List conditions",
+  "spec": "1",
+  "section": "Conditions in the list display",
+  "doc": "https://elog.psi.ch/elog/config.html#list-conditions-1",
+  "default": null
+ },
+ {
+  "name": "Password file",
+  "spec": "<file>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#password-file-file",
+  "default": null
+ },
+ {
+  "name": "Login expiration",
+  "spec": "<hours>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#login-expiration-hours",
+  "default": null
+ },
+ {
+  "name": "Admin user",
+  "spec": "<user list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#admin-user-user-list",
+  "default": null
+ },
+ {
+  "name": "Login user",
+  "spec": "<user list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#login-user-user-list",
+  "default": null
+ },
+ {
+  "name": "Self register",
+  "spec": "0|1|2|3|4",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#self-register-01234",
+  "default": null
+ },
+ {
+  "name": "Allow password change",
+  "spec": "0|1",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#allow-password-change-01",
+  "default": null
+ },
+ {
+  "name": "Allow <command>",
+  "spec": "<user list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#allow-command-user-list",
+  "default": null
+ },
+ {
+  "name": "Deny <command>",
+  "spec": "<user list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#deny-command-user-list",
+  "default": null
+ },
+ {
+  "name": "Hosts allow",
+  "spec": "<list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#hosts-allow-list",
+  "default": null
+ },
+ {
+  "name": "Hosts deny",
+  "spec": "<list>",
+  "section": "Password file",
+  "doc": "https://elog.psi.ch/elog/config.html#hosts-deny-list",
+  "default": null
+ },
+ {
+  "name": "Authentication",
+  "spec": "<method(s)>",
+  "section": "Kerberos authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#authentication-methods",
+  "default": null
+ },
+ {
+  "name": "Kerberos Realm",
+  "spec": "<realm>",
+  "section": "Kerberos authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#kerberos-realm-realm",
+  "default": null
+ },
+ {
+  "name": "Authentication",
+  "spec": "Webserver",
+  "section": "Kerberos authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#authentication-webserver",
+  "default": null
+ },
+ {
+  "name": "Email type \"Normal routine\"",
+  "spec": "...",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-type-normal-routine",
+  "default": null
+ },
+ {
+  "name": "Show text",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#show-text-01",
+  "default": null
+ },
+ {
+  "name": "Enable attachments",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#enable-attachments-01",
+  "default": null
+ },
+ {
+  "name": "Show attachments",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#show-attachments-01",
+  "default": null
+ },
+ {
+  "name": "Preview attachments",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#preview-attachments-01",
+  "default": null
+ },
+ {
+  "name": "Summary lines",
+  "spec": "x",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#summary-lines-x",
+  "default": "3"
+ },
+ {
+  "name": "Summary line length",
+  "spec": "x",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#summary-line-length-x",
+  "default": "40"
+ },
+ {
+  "name": "Attachment lines",
+  "spec": "x",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#attachment-lines-x",
+  "default": "300"
+ },
+ {
+  "name": "Reverse sort",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#reverse-sort-01",
+  "default": null
+ },
+ {
+  "name": "Search all logbooks",
+  "spec": "0|1|2",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#search-all-logbooks-012",
+  "default": "1"
+ },
+ {
+  "name": "Enable browsing",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#enable-browsing-01",
+  "default": null
+ },
+ {
+  "name": "Filtered browsing",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#filtered-browsing-01",
+  "default": null
+ },
+ {
+  "name": "Default encoding",
+  "spec": "0|1|2",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#default-encoding-012",
+  "default": "2"
+ },
+ {
+  "name": "Allowed encoding",
+  "spec": "<n>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#allowed-encoding-n",
+  "default": null
+ },
+ {
+  "name": "Allow HTML",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#allow-html-01",
+  "default": "0"
+ },
+ {
+  "name": "Suppress default",
+  "spec": "0|1|2|3",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#suppress-default-0123",
+  "default": "0"
+ },
+ {
+  "name": "Suppress Email on edit",
+  "spec": "0|1|2|3",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#suppress-email-on-edit-0123",
+  "default": "0"
+ },
+ {
+  "name": "Resubmit default",
+  "spec": "0|1|2",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#resubmit-default-012",
+  "default": "0"
+ },
+ {
+  "name": "Resubmit replies",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#resubmit-replies-01",
+  "default": "0"
+ },
+ {
+  "name": "Display Email recipients",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#display-email-recipients-01",
+  "default": "1"
+ },
+ {
+  "name": "Email Format",
+  "spec": "<n>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#email-format-n",
+  "default": null
+ },
+ {
+  "name": "Email Encoding",
+  "spec": "<n>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#email-encoding-n",
+  "default": null
+ },
+ {
+  "name": "Max email attachment size",
+  "spec": "<n>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#max-email-attachment-size-n",
+  "default": "10000000 (ten million bytes"
+ },
+ {
+  "name": "Back to main",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#back-to-main-01",
+  "default": "0"
+ },
+ {
+  "name": "Logout to main",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#logout-to-main-01",
+  "default": "0"
+ },
+ {
+  "name": "Logout to URL",
+  "spec": "<URL>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#logout-to-url-url",
+  "default": null
+ },
+ {
+  "name": "List after submit",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#list-after-submit-01",
+  "default": "0"
+ },
+ {
+  "name": "Restrict edit",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#restrict-edit-01",
+  "default": "0"
+ },
+ {
+  "name": "Expand default",
+  "spec": "0|1|2|3",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#expand-default-0123",
+  "default": "1"
+ },
+ {
+  "name": "Hidden",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#hidden-01",
+  "default": null
+ },
+ {
+  "name": "Hide Comments",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#hide-comments-01",
+  "default": null
+ },
+ {
+  "name": "Use Lock",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#use-lock-01",
+  "default": null
+ },
+ {
+  "name": "Show top groups",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#show-top-groups-01",
+  "default": null
+ },
+ {
+  "name": "Fix text",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#fix-text-01",
+  "default": "0"
+ },
+ {
+  "name": "Case sensitive search",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#case-sensitive-search-01",
+  "default": "0"
+ },
+ {
+  "name": "Mode commands",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#mode-commands-01",
+  "default": null
+ },
+ {
+  "name": "Suppress execute default",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#suppress-execute-default-01",
+  "default": null
+ },
+ {
+  "name": "Preserve IDs",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#preserve-ids-01",
+  "default": null
+ },
+ {
+  "name": "Collapse to last",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#collapse-to-last-01",
+  "default": null
+ },
+ {
+  "name": "Sort Attribute Options <attribute>",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#sort-attribute-options-attribute-01",
+  "default": null
+ },
+ {
+  "name": "Allow branching",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#allow-branching-01",
+  "default": null
+ },
+ {
+  "name": "Enable Smileys",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#enable-smileys-01",
+  "default": null
+ },
+ {
+  "name": "Refresh",
+  "spec": "<seconds>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#refresh-seconds",
+  "default": null
+ },
+ {
+  "name": "Show last default",
+  "spec": "<days>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#show-last-default-days",
+  "default": null
+ },
+ {
+  "name": "Save drafts",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#save-drafts-01",
+  "default": null
+ },
+ {
+  "name": "Autosave",
+  "spec": "<seconds>",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#autosave-seconds",
+  "default": "10 seconds after the last edit"
+ },
+ {
+  "name": "List drafts",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#list-drafts-01",
+  "default": null
+ },
+ {
+  "name": "Hard wrap",
+  "spec": "0|1",
+  "section": "Flags",
+  "doc": "https://elog.psi.ch/elog/config.html#hard-wrap-01",
+  "default": null
+ },
+ {
+  "name": "Mirror server",
+  "spec": "<URL-list>",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-server-url-list",
+  "default": null
+ },
+ {
+  "name": "Mirror config",
+  "spec": "0 | 1",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-config-0-1",
+  "default": null
+ },
+ {
+  "name": "Mirror cron",
+  "spec": "Minute Hour Day Month Weekday",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-cron-minute-hour-day-month-weekday",
+  "default": null
+ },
+ {
+  "name": "Mirror user",
+  "spec": "<name>",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-user-name",
+  "default": null
+ },
+ {
+  "name": "Mirror simulate",
+  "spec": "0 | 1",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-simulate-0-1",
+  "default": null
+ },
+ {
+  "name": "Mirror exclude",
+  "spec": "0 | 1",
+  "section": "Mirroring",
+  "doc": "https://elog.psi.ch/elog/config.html#mirror-exclude-0-1",
+  "default": null
+ },
+ {
+  "name": "Group <group name>",
+  "spec": "<Logbook1>, <Logbook2>, <other group>",
+  "section": "Groups of logbooks",
+  "doc": "https://elog.psi.ch/elog/config.html#groups-of-logbooks",
+  "default": null
+ },
+ {
+  "name": "Email all",
+  "spec": "<attribute>",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#attributes",
+  "default": null
+ },
+ {
+  "name": "Execute new",
+  "spec": "echo \"New message wiht ID $message id of type $type from $long_name on $remote_host\" >> /tmp/elog.log",
+  "section": "Attributes",
+  "doc": "https://elog.psi.ch/elog/config.html#attributes",
+  "default": null
+ },
+ {
+  "name": "LDAP server",
+  "spec": "ldap://example.org:389",
+  "section": "LDAP authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#ldap-authentication",
+  "default": null
+ },
+ {
+  "name": "LDAP userbase",
+  "spec": "ou=People;dc=example,dc=org",
+  "section": "LDAP authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#ldap-authentication",
+  "default": null
+ },
+ {
+  "name": "LDAP login attribute",
+  "spec": "uid",
+  "section": "LDAP authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#ldap-authentication",
+  "default": null
+ },
+ {
+  "name": "LDAP register",
+  "spec": "1",
+  "section": "LDAP authentication",
+  "doc": "https://elog.psi.ch/elog/config.html#ldap-authentication",
+  "default": null
+ },
+ {
+  "name": "Email <attribute> <value>",
+  "spec": "<list>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email Subject",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email Subject Edit",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email From",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Default Email From",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email Heading",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email Heading Edit",
+  "spec": "<string>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Omit Email To",
+  "spec": "0|1",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Suppress Email to users",
+  "spec": "0|1",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Email attributes",
+  "spec": "<list>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ },
+ {
+  "name": "Use Email URL",
+  "spec": "<URL>",
+  "section": "EMail notification",
+  "doc": "https://elog.psi.ch/elog/config.html#email-notification",
+  "default": null
+ }
+]

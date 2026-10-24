@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import re
 
-from .elogcfg import (ATTR_LIST_KEYS, BUILTIN_ATTRS, ElogConfig, attribute_key_target, norm,
+from .elogcfg import (ATTR_LIST_KEYS, BUILTIN_ATTRS, ElogConfig, attribute_key_target, join_list, norm,
                       split_list, strip_condition)
+from .options import check_value, lookup
 
 # Keys that look plausible but are not ELOG options -> the right spelling
 MISSPELLED = {
@@ -35,6 +36,10 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
     groups = cfg.groups()
     group_lower = {g["name"].lower() for g in groups}
     user_lower = {u.lower(): u for u in users} if users else None
+
+    if not cfg.global_.get_list("Admin user"):
+        issues.append(_issue("warning", "global", "No 'Admin user' in [global]: nobody can manage groups or "
+                                                  "other people's logbooks in the manager", key="Admin user"))
 
     # duplicate sections
     seen = {}
@@ -103,6 +108,17 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                                                       f"did you mean '{right}'?", key=k,
                                      fix={"op": "rename_key", "section": s.name, "key": k, "new": cond + right}))
 
+            opt = lookup(k)
+            if opt is None and norm(bare) not in MISSPELLED:
+                issues.append(_issue("info", s.name, f"'{bare}' is not in ELOG's option reference; "
+                                                     "check the spelling (it may also be undocumented)", key=k))
+            elif opt is not None:
+                problem = check_value(opt, v)
+                if problem:
+                    issues.append(_issue("error", s.name, f"'{k}' {problem}", key=k))
+                if not is_global and opt["scope"] == "global":
+                    issues.append(_issue("warning", s.name, f"'{k}' only has an effect in [global]", key=k))
+
             if nk.startswith("style ") and v:
                 for decl in [d.strip() for d in v.split(";") if d.strip()]:
                     if ":" not in decl:
@@ -146,4 +162,41 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                                                  "conditional '{n} key' uses them; they can be removed"))
         if not is_global and not s.items():
             issues.append(_issue("warning", s.name, "Logbook has no settings"))
+        if not is_global:
+            problem = author_problem(cfg, s)
+            if problem:
+                issues.append(_issue("error", s.name, problem,
+                                     fix={"op": "ensure_author", "section": s.name}))
     return issues
+
+
+# Policy: every logbook has an Author attribute that is filled in automatically and cannot be changed.
+AUTHOR_PRESET = "$long_name"
+
+
+def _effective(cfg: ElogConfig, sec, key: str) -> str | None:
+    v = sec.get(key)
+    return v if v is not None else cfg.global_.get(key)
+
+
+def author_problem(cfg: ElogConfig, sec) -> str | None:
+    attrs = split_list(_effective(cfg, sec, "Attributes") or "")
+    if attrs and "author" not in (a.lower() for a in attrs):
+        return "Every logbook needs an Author attribute"
+    if "author" not in (a.lower() for a in split_list(_effective(cfg, sec, "Locked Attributes") or "")):
+        return "Author must be locked (Locked Attributes) so entries cannot be signed with another name"
+    if not (_effective(cfg, sec, "Preset Author") or "").strip():
+        return "Author must be filled in automatically (Preset Author, e.g. $long_name)"
+    return None
+
+
+def ensure_author(cfg: ElogConfig, sec) -> None:
+    """Make `sec` satisfy the Author policy, touching as little as possible."""
+    attrs = split_list(_effective(cfg, sec, "Attributes") or "")
+    if attrs and "author" not in (a.lower() for a in attrs):
+        sec.set("Attributes", join_list(["Author"] + attrs))
+    locked = split_list(_effective(cfg, sec, "Locked Attributes") or "")
+    if "author" not in (a.lower() for a in locked):
+        sec.set("Locked Attributes", join_list(["Author"] + locked))
+    if not (_effective(cfg, sec, "Preset Author") or "").strip():
+        sec.set("Preset Author", AUTHOR_PRESET)

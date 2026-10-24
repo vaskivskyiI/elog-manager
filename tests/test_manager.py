@@ -68,12 +68,12 @@ def client(tmp_path):
     shutil.copy(REF, tmp_path / "elogd.cfg")
     pw = sha256_crypt("demo")
     users = "".join(f"<user><name>{n}</name><password encoding=\"SHA256\">{pw}</password></user>"
-                    for n in ["alice", "bob", "carol"])
+                    for n in ["alice", "bob", "carol", "grace"])
     (tmp_path / "passwords.pwd").write_text(f"<list>{users}</list>", encoding="utf-8")
     marker = tmp_path / "reloaded"
     reload_cmd = f'"{sys.executable}" -c "open(r\'{marker}\', \'a\').write(\'x\')"'
     app = create_app({"elogd_cfg": str(tmp_path / "elogd.cfg"), "password_file": str(tmp_path / "passwords.pwd"),
-                      "backup_dir": str(tmp_path / "bk"), "secret_key": "x", "secure_cookies": False,
+                      "state_dir": str(tmp_path / "state"), "secret_key": "x", "secure_cookies": False,
                       "reload_mode": "command", "reload_command": reload_cmd})
     c = app.test_client()
     c.tmp = tmp_path
@@ -86,7 +86,8 @@ def login(c, user):
 
 def test_login_roles(client):
     assert client.post("/api/login", json={"user": "alice", "password": "bad"}).status_code == 401
-    assert login(client, "carol").status_code == 403  # not an admin anywhere
+    assert login(client, "grace").status_code == 200  # every ELOG account may sign in
+    assert client.get("/api/me").json["role"] == "user"
     assert login(client, "bob").status_code == 200
     assert client.get("/api/me").json["role"] == "logbook_admin"
     assert login(client, "alice").status_code == 200
@@ -112,7 +113,7 @@ def test_create_logbook_in_group_with_template(client):
     # placed right after stm005 so the file stays organised
     names = c.logbook_names()
     assert names.index("stm006") == names.index("stm005") + 1
-    assert os.listdir(client.tmp / "bk")
+    assert os.listdir(client.tmp / "state" / "backups")
     # stale etag is rejected
     r = client.post("/api/apply", json={"etag": st["etag"], "ops": [op]}, headers=H)
     assert r.status_code == 409
@@ -133,8 +134,126 @@ def test_logbook_admin_limits(client):
     assert client.post("/api/apply", json={"etag": st["etag"], "ops": []}).status_code == 403  # no CSRF header
 
 
+def test_users_only_see_their_logbooks(client):
+    login(client, "bob")
+    st = client.get("/api/state").json
+    assert sorted(l["name"] for l in st["logbooks"]) == ["STM", "STM-test", "stm001", "stm002", "stm003", "stm004", "stm005"]
+    g = {x["name"]: x["members"] for x in st["groups"]}
+    assert g["Instruments"] == ["STM"] and g["Experiments"] == ["STM Experiments", "Transport", "Raman"]
+    assert all(i["section"] != "global" for i in st["issues"])
+    assert not any(k.lower() in ("password file", "admin user") for k, _ in st["global"])
+    assert "email" not in st["users"][0]
+    assert client.get("/api/section/Laser%20A").status_code == 404
+
+
+def test_new_user_creates_logbook_and_becomes_admin(client):
+    login(client, "grace")
+    st = client.get("/api/state").json
+    assert st["logbooks"] == [] and "builtin:Instrument" in st["templates"]
+    # cannot copy someone else's logbook
+    bad = {"op": "create_logbook", "name": "g1", "template": "stm005"}
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": [bad]}, headers=H).status_code == 400
+    op = {"op": "create_logbook", "name": "Grace setup", "template": "builtin:Instrument", "group": "Instruments",
+          "comment": "My setup", "set": {"Login user": "carol", "Admin user": "carol"}}
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": [op]}, headers=H)
+    assert r.status_code == 200, r.json
+    c = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8"))
+    s = c.section("Grace setup")
+    assert s.get("Admin user") == "grace, carol" and s.get("Login user") == "grace, carol"
+    assert s.get("Attributes") == "Author, Category, Subject"
+    assert c.groups_of("Grace setup") == ["Instruments"]
+    assert client.get("/api/me").json["role"] == "logbook_admin"
+    st = client.get("/api/state").json
+    assert [l["name"] for l in st["logbooks"]] == ["Grace setup"]
+    # move it to another group; other members of the groups stay as they are
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": [
+        {"op": "set_logbook_groups", "name": "Grace setup", "groups": ["Playground"]}]}, headers=H)
+    assert r.status_code == 200, r.json
+    c = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8"))
+    g = {x["name"]: x["members"] for x in c.groups()}
+    assert g["Playground"] == ["Playground", "Grace setup"] and g["Instruments"] == ["Laser A", "STM", "Cryostat"]
+    # removing yourself as admin is allowed but warned about
+    st = client.get("/api/state").json
+    dry = client.post("/api/apply", json={"etag": st["etag"], "dry_run": True, "ops": [
+        {"op": "list_remove", "section": "Grace setup", "key": "Admin user", "items": ["grace"]}]}, headers=H).json
+    assert dry["warnings"]
+
+
+def test_option_catalog():
+    from elogmgr.options import catalog, check_value, lookup
+    assert len(catalog()) > 200
+    assert lookup("{1}Subst SN")["name"] == "Subst <attribute>"
+    assert lookup("Options Category")["name"] == "Options <attribute>"
+    assert lookup("Page title")["scope"] == "any"  # documented for [global] and for logbooks
+    assert lookup("Password file")["scope"] == "global"
+    assert lookup("extendable attributes") is None
+    assert check_value(lookup("Reverse sort"), "yes") and not check_value(lookup("Reverse sort"), "1")
+    assert check_value(lookup("Display mode"), "list") and not check_value(lookup("Display mode"), "threaded")
+    assert check_value(lookup("Entries per page"), "fifty") and not check_value(lookup("Restrict edit time"), "0.5")
+
+
+def test_config_check_blocks_new_errors(client):
+    bad = [{"op": "set", "section": "stm005", "key": "Entries per page", "value": "fifty"}]
+    login(client, "bob")
+    st = client.get("/api/state").json
+    dry = client.post("/api/apply", json={"etag": st["etag"], "ops": bad, "dry_run": True}, headers=H).json
+    assert dry["blocking"] and not dry["can_force"]
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": bad, "force": True}, headers=H).status_code == 400
+    login(client, "alice")  # managers may override deliberately
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": bad}, headers=H).status_code == 400
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": bad, "force": True}, headers=H).status_code == 200
+
+
+def test_author_is_required_locked_and_prefilled(client):
+    login(client, "bob")
+    st = client.get("/api/state").json
+    unlock = [{"op": "set", "section": "STM", "key": "Locked Attributes", "value": "SN"}]
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": unlock}, headers=H)
+    assert r.status_code == 400 and "Author must be locked" in r.json["error"]
+    # without the [global] defaults, new logbooks get them in their own section
+    login(client, "alice")
+    st = client.get("/api/state").json
+    r = client.post("/api/apply", json={"etag": st["etag"], "force": True, "ops": [
+        {"op": "delete_key", "section": "global", "key": "locked attributes"},
+        {"op": "delete_key", "section": "global", "key": "preset Author"},
+        {"op": "create_logbook", "name": "plain", "template": "builtin:Simple"}]}, headers=H)
+    assert r.status_code == 200, r.json
+    s = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8")).section("plain")
+    assert s.get("Locked Attributes") == "Author" and s.get("Preset Author") == "$long_name"
+    # the one-click fix repairs an existing logbook
+    st = client.get("/api/state").json
+    fix = next(i["fix"] for i in st["issues"] if i["section"] == "r001" and i.get("fix", {}).get("op") == "ensure_author")
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": [fix]}, headers=H).status_code == 200
+    assert not any(i["section"] == "r001" and "Author" in i["message"] for i in client.get("/api/state").json["issues"])
+
+
+def test_names_are_unique_and_series_continue(client):
+    login(client, "grace")  # sees no logbooks, but suggestions and checks cover all of them
+    assert client.get("/api/check_name?group=STM%20Experiments").json["suggestion"] == "stm006"
+    assert client.get("/api/check_name?name=stm002").json["available"] is False
+    assert client.get("/api/check_name?name=raman").json["available"] is False  # a group name
+    assert client.get("/api/check_name?name=stm006").json["available"] is True
+    st = client.get("/api/state").json
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": [
+        {"op": "create_logbook", "name": "STM002", "template": "builtin:Simple"}]}, headers=H)
+    assert r.status_code == 400 and "already exists" in r.json["error"]
+
+
+def test_env_settings(tmp_path, monkeypatch):
+    from elogmgr.settings import from_env, load_env_file
+    (tmp_path / ".env").write_text("ELOG_DIR=elog\nELOGMGR_BEHIND_PROXY=0\nELOGMGR_RELOAD=none\n", encoding="utf-8")
+    for k in ("ELOG_DIR", "ELOGD_CFG", "ELOGMGR_BEHIND_PROXY", "ELOGMGR_RELOAD"):
+        monkeypatch.delenv(k, raising=False)
+    load_env_file(str(tmp_path / ".env"))
+    s = from_env()
+    assert s["elogd_cfg"] == str(tmp_path / "elog" / "elogd.cfg")
+    assert s["behind_proxy"] is False and s["secure_cookies"] is False and s["reload_mode"] == "none"
+
+
 def test_reload_button_and_failures(client):
     login(client, "bob")
+    assert client.post("/api/reload", headers=H).status_code == 403  # manual reload is for managers
+    login(client, "alice")
     assert client.post("/api/reload", headers=H).json["ok"]
     assert reload_elogd({"reload_mode": "command", "reload_command": f'"{sys.executable}" -c "raise SystemExit(3)"'})["ok"] is False
     assert reload_elogd({"reload_mode": "signal", "elogd_process": "no-such-elogd-xyz"})["ok"] is False

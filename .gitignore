@@ -4,7 +4,8 @@ __pycache__/
 settings.json
 demo/elogd.cfg
 demo/passwords.pwd
-demo/settings.json
+demo/.env
+demo/state/
 demo/backups/
 
 # Real server configuration and its review stay local (the repository is public)

@@ -1,16 +1,16 @@
 # ELOG Manager next to an elogd that runs on the host.
 #
-#   cp .env.example .env                 # set ELOG_UID/GID (id -u elog; id -g elog) and ELOG_DIR
-#   cp settings.example.json settings.json   # paths as seen on the host, secret_key, manager_admins
-#   docker compose up -d --build
+#   cp .env.example .env        # ELOG_DIR, ELOG_UID, ELOG_GID
+#   sudo docker compose up -d --build
 #
 # The ELOG directory is mounted at the same path inside the container, so the
-# paths in settings.json are the host paths.
+# paths in elogd.cfg (e.g. "Password file") resolve the same way.
 services:
   elog-manager:
     build: .
     image: elog-manager:latest
     restart: unless-stopped
+    env_file: .env
     # Same uid/gid as elogd ("Usr"/"Grp" in elogd.cfg): needed to write elogd.cfg
     # and to send elogd the reload signal (SIGHUP).
     user: "${ELOG_UID:-1000}:${ELOG_GID:-1000}"
@@ -18,9 +18,8 @@ services:
     # If elogd runs in this compose project instead, use  pid: "service:elogd"
     pid: host
     ports:
-      - "127.0.0.1:${ELOGMGR_PORT:-8090}:8090"   # put your HTTPS reverse proxy in front
+      - "127.0.0.1:${ELOGMGR_PORT:-8090}:8090"
     volumes:
-      - ./settings.json:/config/settings.json:ro
       - ${ELOG_DIR:-/usr/local/elog}:${ELOG_DIR:-/usr/local/elog}
-      # Mount extra directories if passwords.pwd or the backups live elsewhere, e.g.
+      # Mount more directories if passwords.pwd or ELOGMGR_STATE_DIR live elsewhere, e.g.
       # - /mnt/elog_data:/mnt/elog_data

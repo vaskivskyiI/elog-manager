@@ -7,6 +7,5 @@ demo
 examples
 tests
 deploy
-settings.json
 .env
 CONFIG_REVIEW.md

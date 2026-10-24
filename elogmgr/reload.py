@@ -33,11 +33,11 @@ def reload_elogd(settings: dict) -> dict:
     """Returns {"ok": bool, "message": str}."""
     mode = settings.get("reload_mode", "signal")
     if mode == "none":
-        return {"ok": True, "message": "Reload disabled (reload_mode = none)"}
+        return {"ok": True, "message": "Reload disabled (ELOGMGR_RELOAD=none)"}
     if mode == "command":
-        cmd = settings.get("reload_command") or settings.get("after_save_command")
+        cmd = settings.get("reload_command")
         if not cmd:
-            return {"ok": False, "message": "reload_mode is 'command' but reload_command is empty"}
+            return {"ok": False, "message": "ELOGMGR_RELOAD=command but ELOGMGR_RELOAD_COMMAND is empty"}
         try:
             r = subprocess.run(cmd, shell=True, timeout=30, capture_output=True, text=True)
         except subprocess.TimeoutExpired:
@@ -60,6 +60,6 @@ def reload_elogd(settings: dict) -> dict:
             pass
     if denied:
         return {"ok": False, "message": f"Not allowed to signal elogd (pid {', '.join(map(str, denied))}). "
-                                        "Run the manager as the elogd user, or set reload_mode to 'command' "
+                                        "Run the manager as the elogd user, or set ELOGMGR_RELOAD=command "
                                         "with 'sudo -n /usr/bin/killall -HUP elogd'."}
     return {"ok": True, "message": "elogd reloaded"}

@@ -95,15 +95,26 @@ async function commit(ops, summary, extra = {}) {
     return false;
   }
   if (!preview.diff) { toast("No changes to save"); return false; }
+  let force = false;
+  const check = preview.blocking
+    ? h("div", { class: "issue error" }, h("span", { class: "msg" }, h("b", {}, "Configuration check failed. "),
+        preview.can_force ? "Fix the errors below, or override the check as a manager." : "Fix the errors below before saving."))
+    : h("div", { class: "issue ok" }, h("span", { class: "msg" }, h("b", {}, "✓ Configuration check passed"),
+        preview.new_issues.length ? " (see the notes below)" : ""));
   const body = h("div", {},
+    check,
     h("p", { class: "muted" }, "These lines of elogd.cfg will change. A backup of the current file is kept."),
     renderDiff(preview.diff),
-    preview.new_issues.length ? h("div", {}, h("h3", { style: "margin-top:12px" }, "New issues this change introduces"),
-      issueList(preview.new_issues)) : null);
-  const ok = await modal(summary || "Review changes", body, [{ label: "Save to elogd.cfg" }]);
+    (preview.warnings || []).map((w) => h("p", { class: "issue warning", style: "margin-top:12px" }, w)),
+    preview.new_issues.length ? h("div", {}, h("h3", { style: "margin-top:12px" }, "Issues this change introduces"),
+      issueList(preview.new_issues)) : null,
+    preview.blocking && preview.can_force ? h("label", { class: "inline", style: "margin-top:12px" },
+      h("input", { type: "checkbox", onchange: (e) => (force = e.target.checked) }), "Save anyway (override the configuration check)") : null);
+  const ok = await modal(summary || "Review changes", body, [{ label: "Save to elogd.cfg",
+    validate: () => (preview.blocking && !force ? (toast("The configuration check failed; fix the errors first", true), false) : true) }]);
   if (!ok) return false;
   try {
-    const res = await api("POST", apiUrl("/api/apply"), { etag: S.state.etag, ops, summary, ...extra });
+    const res = await api("POST", apiUrl("/api/apply"), { etag: S.state.etag, ops, summary, force, ...extra });
     if (res.reload && !res.reload.ok) toast("Saved, but ELOG was not reloaded: " + res.reload.message, true);
     else toast("Saved and " + (res.reload ? res.reload.message : "written") + ".");
     await reload();
@@ -117,13 +128,43 @@ async function commit(ops, summary, extra = {}) {
 
 // ------------------------------------------------------------- state & nav
 async function reload() {
+  if (!S.opts) await loadOptions();
   S.state = await api("GET", apiUrl("/api/state"));
   document.body.classList.toggle("super", isSuper());
-  $("#whoami").textContent = `${S.state.me.name} · ${isSuper() ? "manager admin" : "logbook admin"}`;
+  $("#whoami").textContent = `${S.state.me.name} · ${ROLE_LABEL[S.state.me.role] || S.state.me.role}`;
   const n = S.state.issues.filter((i) => i.level === "error").length;
   $("#issue-count").textContent = n || "";
   render();
 }
+// ------------------------------------------------------------ option catalog
+async function loadOptions() {
+  const d = await api("GET", apiUrl("/api/options"));
+  const exact = new Map(), patterns = [];
+  for (const o of d.options) {
+    if (o.pattern) {
+      const rx = esc(o.name.trim().split(/\s+/).join(" ")).replace(/<[^>]*>/g, ".+");
+      patterns.push([new RegExp("^" + rx + "$", "i"), o]);
+    } else if (!exact.has(norm(o.name))) exact.set(norm(o.name), o);
+  }
+  patterns.sort((a, b) => b[1].name.length - a[1].name.length);
+  S.opts = { list: d.options, exact, patterns, common: d.common };
+}
+/** Catalog entry for a config key ("Options Category" -> "Options <attribute>"), or undefined. */
+function optLookup(key) {
+  if (!S.opts) return undefined;
+  const bare = splitCond(key)[1].trim().split(/\s+/).join(" ");
+  return S.opts.exact.get(norm(bare)) || (S.opts.patterns.find(([rx]) => rx.test(bare)) || [])[1];
+}
+/** What applies when the key is not set here: the [global] value, else ELOG's default. */
+function inherited(key, fromGlobal = true) {
+  const g = fromGlobal ? globalVal(key) : undefined;
+  if (g !== undefined) return { from: "global", value: g };
+  const o = optLookup(key);
+  return o && o.default ? { from: "default", value: o.default } : null;
+}
+const yesNo = (v) => (v === "1" ? "yes" : v === "0" ? "no" : v);
+
+const ROLE_LABEL = { super: "manager", logbook_admin: "logbook admin", user: "user" };
 const isSuper = () => S.state && S.state.me.role === "super";
 const lbByName = (n) => S.state.logbooks.find((l) => l.name.toLowerCase() === n.toLowerCase());
 const groupByName = (groups, n) => groups.find((g) => g.name.toLowerCase() === n.toLowerCase());
@@ -226,7 +267,12 @@ function viewLogbooks() {
   const match = (lb) => !f || lc(lb.name).includes(f) || lc(getItem(lb.items, "Comment") || "").includes(f)
     || splitList(getItem(lb.items, "Login user")).some((u) => lc(u) === f);
   const canDrag = isSuper();
-  const tops = topGroups(groups);
+  const visibleGroup = (g, seen = new Set()) => {
+    if (seen.has(lc(g.name))) return false;
+    seen.add(lc(g.name));
+    return g.members.some((m) => { const sg = asGroup(groups, m); return sg ? visibleGroup(sg, seen) : !!lbByName(m); });
+  };
+  const tops = isSuper() ? topGroups(groups) : topGroups(groups).filter((g) => visibleGroup(g));
   S.collapsed ||= new Set();
 
   const dropZone = (onDrop) => ({
@@ -289,6 +335,7 @@ function viewLogbooks() {
       collapsed ? null : h("div", { class: "items" },
         g.members.map((m, j) => {
           const sg = asGroup(groups, m);
+          if (sg && !isSuper() && !visibleGroup(sg)) return null;
           if (!sg) return lbRow(m, g.name, j, g.members.length);
           if (sub.includes(lc(sg.name))) return h("div", { class: "lb missing" }, h("span", { class: "name" }, m), h("span", { class: "comment" }, "group contains itself"));
           return groupCard(sg, g.name, j, g.members.length, sub);
@@ -313,8 +360,13 @@ function viewLogbooks() {
         S.selected.size ? h("button", { onclick: bulkEdit }, `Bulk edit (${S.selected.size})`) : null,
         S.selected.size ? h("button", { class: "link", onclick: () => { S.selected.clear(); render(); } }, "clear") : null,
         h("button", { onclick: () => newGroup(null) }, "New group"),
-        h("button", { class: "primary", onclick: () => newLogbook({}) }, "New logbook"),
-      ] : null),
+      ] : null,
+      h("button", { class: "primary", onclick: () => newLogbook({}) }, "New logbook")),
+    !S.state.logbooks.length ? h("div", { class: "card", style: "margin-bottom:16px" },
+      h("h3", {}, "You don't administer any logbook yet"),
+      h("p", { class: "muted" }, "Create one and you become its admin: you choose who can use it, its categories and fields. ",
+        "Logbooks other people administer are not shown here."),
+      h("button", { class: "primary", onclick: () => newLogbook({}) }, "Create a logbook")) : null,
     dirty ? h("div", { class: "pending" }, h("b", {}, "Unsaved group layout."),
       h("span", { class: "spacer" }),
       h("button", { onclick: () => { S.groupsDraft = null; render(); } }, "Discard"),
@@ -434,59 +486,81 @@ async function saveGroups() {
   render();
 }
 
-function suggestName(group) {
-  const g = group && groupByName(S.state.groups, group);
-  if (!g) return "";
-  let best = null;
-  for (const m of g.members) {
-    const mm = /^(.*?)(\d+)$/.exec(m);
-    if (mm && (!best || +mm[2] > +best[2])) best = mm;
-  }
-  if (!best) return "";
-  return best[1] + String(+best[2] + 1).padStart(best[2].length, "0");
-}
+const BUILTIN_DEFAULT = "builtin:Experiment (runs)";
 
 async function newLogbook({ group, template }) {
   const groups = S.state.groups;
-  const st = { group: group || "", template: template || "", login: [], admin: [] };
+  const me = S.state.me.name;
+  const st = { group: group || "", template: template || "", login: [], admin: [], nameTouched: !!template };
   const lastIn = (gname) => {
     const g = groupByName(groups, gname || "");
     const ex = g ? g.members.filter((m) => lbByName(m)) : [];
     return ex.length ? ex[ex.length - 1] : "";
   };
-  if (!st.template) st.template = lastIn(st.group);
-  const nameInp = h("input", { value: template ? template + "-copy" : suggestName(st.group), placeholder: "e.g. np011" });
+  const defaultTemplate = () => lastIn(st.group) || (S.state.logbooks.length && isSuper() ? "" : BUILTIN_DEFAULT);
+  if (!st.template) st.template = defaultTemplate();
+  const status = h("span", { class: "hint" });
+  const nameInp = h("input", { value: template ? template + "-copy" : "", placeholder: "Logbook name" });
+  let timer = null, seq = 0;
+  const checkName = async () => {
+    const n = nameInp.value.trim();
+    if (!n) { status.textContent = ""; return false; }
+    const mine = ++seq;
+    const r = await api("GET", apiUrl("/api/check_name?name=" + encodeURIComponent(n)));
+    if (mine !== seq) return r.valid && r.available;  // a newer check is running; don't overwrite its result
+    status.textContent = !r.valid ? "✗ avoid [ ] , = # ; / \\ and the prefix 'global'" : r.available ? "✓ available" : "✗ already exists";
+    status.style.color = r.valid && r.available ? "var(--ok)" : "var(--danger)";
+    return r.valid && r.available;
+  };
+  nameInp.addEventListener("input", () => { st.nameTouched = true; clearTimeout(timer); timer = setTimeout(checkName, 250); });
+  const suggest = async () => {
+    if (st.nameTouched || !st.group) return;
+    const r = await api("GET", apiUrl("/api/check_name?group=" + encodeURIComponent(st.group)));
+    if (r.suggestion && !st.nameTouched) { nameInp.value = r.suggestion; checkName(); }
+  };
   const commentInp = h("input", { placeholder: "Short description shown on the main page" });
   const accessBox = h("div", {});
   const fillAccess = () => {
     const t = st.template && lbByName(st.template);
-    st.login = t ? splitList(getItem(t.items, "Login user")) : [];
-    st.admin = t ? splitList(getItem(t.items, "Admin user")) : [];
+    st.login = t ? splitList(getItem(t.items, "Login user")) : [me];
+    st.admin = t ? splitList(getItem(t.items, "Admin user")) : [me];
+    if (!isSuper()) {
+      st.admin = [me, ...st.admin.filter((u) => u !== me)];
+      if (st.login.length && !st.login.includes(me)) st.login.unshift(me);
+    }
     accessBox.replaceChildren(
       h("label", {}, h("span", {}, "Login users ", h("span", { class: "hint" }, "empty = every registered user")),
         chipInput(st.login, userNames(), (v) => (st.login = v), { validate: S.state.users.length > 0 })),
-      h("label", { style: "margin-top:10px" }, "Admin users",
+      h("label", { style: "margin-top:10px" }, h("span", {}, "Admin users ",
+        h("span", { class: "hint" }, isSuper() ? "may edit this logbook here and in ELOG" : "you are always added as admin")),
         chipInput(st.admin, userNames(), (v) => (st.admin = v), { validate: S.state.users.length > 0 })));
   };
   const tplSel = h("select", { onchange: (e) => { st.template = e.target.value; fillAccess(); } },
-    h("option", { value: "" }, "(empty logbook)"),
-    S.state.logbooks.map((l) => h("option", { value: l.name, selected: l.name === st.template }, l.name)));
+    h("optgroup", { label: "Start from" },
+      S.state.templates.map((t) => h("option", { value: t, selected: t === st.template }, t.replace(/^builtin:/, ""))),
+      isSuper() ? h("option", { value: "", selected: !st.template }, "Empty logbook") : null),
+    S.state.logbooks.length ? h("optgroup", { label: isSuper() ? "Copy a logbook" : "Copy one of your logbooks" },
+      S.state.logbooks.map((l) => h("option", { value: l.name, selected: l.name === st.template }, l.name))) : null);
   const grpSel = h("select", { onchange: (e) => {
     st.group = e.target.value;
-    const s = suggestName(st.group); if (s && !template) nameInp.value = s;
-    st.template = template || lastIn(st.group); tplSel.value = st.template; fillAccess();
-  } }, h("option", { value: "" }, "(no group)"), groups.map((g) => h("option", { value: g.name, selected: g.name === st.group }, g.name)));
+    st.template = template || defaultTemplate(); tplSel.value = st.template; fillAccess();
+    suggest();
+  } }, h("option", { value: "" }, "(no group: not listed on the start page)"),
+    groups.map((g) => h("option", { value: g.name, selected: g.name === st.group }, g.name)));
   fillAccess();
   const body = h("div", { class: "grid2" },
-    h("label", {}, "Name", nameInp),
-    h("label", {}, "Group", grpSel),
-    h("label", {}, h("span", {}, "Copy settings from ", h("span", { class: "hint" }, "attributes, options, display…")), tplSel),
+    h("label", {}, h("span", {}, "Group ", h("span", { class: "hint" }, "numbered series continue automatically")), grpSel),
+    h("label", {}, h("span", {}, "Name ", status), nameInp),
+    h("label", {}, h("span", {}, "Settings ", h("span", { class: "hint" }, "attributes, options, display…")), tplSel),
     h("label", {}, "Comment", commentInp),
-    h("div", { style: "grid-column:1/-1" }, accessBox));
+    h("div", { style: "grid-column:1/-1" }, accessBox),
+    h("p", { class: "hint", style: "grid-column:1/-1" }, "Every logbook gets a locked Author field that is filled in automatically."));
+  suggest();
+  if (template) checkName();
   const ok = await modal(template ? `Clone '${template}'` : "New logbook", body, [{
-    label: "Preview", validate: () => {
+    label: "Preview", validate: async () => {
       if (!nameInp.value.trim()) { toast("Name is required", true); return false; }
-      if (lbByName(nameInp.value.trim())) { toast("A logbook with this name exists", true); return false; }
+      if (!(await checkName())) { toast(status.textContent.replace(/^✗ /, "") || "Name not available", true); return false; }
       return true;
     },
   }]);
@@ -555,6 +629,8 @@ class Editor {
     if (i >= 0) this.items[i][1] = value; else this.items.push([key, value]);
   }
   list(key) { return splitList(this.get(key)); }
+  /** The list in effect: this section's value, else the inherited [global] value (not for [global] itself). */
+  effList(key) { return this.get(key) !== undefined || this.name === "global" ? this.list(key) : splitList(globalVal(key)); }
   setList(key, arr) { this.set(key, arr.join(", ")); }
   attrs() {
     return this.list("Attributes").map((name) => {
@@ -567,7 +643,7 @@ class Editor {
         if (t.prefix === "Preset") a.preset = v;
         if (t.prefix === "Comment") a.comment = v;
       }
-      const inL = (key) => this.list(key).some((x) => x.toLowerCase() === name.toLowerCase());
+      const inL = (key) => this.effList(key).some((x) => x.toLowerCase() === name.toLowerCase());
       a.required = inL("Required Attributes"); a.locked = inL("Locked Attributes"); a.extendable = inL("Extendable options");
       return a;
     });
@@ -598,7 +674,7 @@ class Editor {
       if (val) this.items.push([prefix + " " + a.name, val]);
     };
     const flag = (key, on) => {
-      let l = this.list(key).filter((x) => x.toLowerCase() !== a.name.toLowerCase());
+      let l = this.effList(key).filter((x) => x.toLowerCase() !== a.name.toLowerCase());
       if (on) l.push(a.name);
       this.setList(key, l);
     };
@@ -647,16 +723,7 @@ function viewLogbook(r) {
 
   const save = async () => {
     const ops = E.ops();
-    if (E.groupsChanged()) {
-      const groups = clone(S.state.groups);
-      for (const g of groups) {
-        const inG = E.groups.includes(g.name);
-        const has = g.members.some((m) => m.toLowerCase() === lb.name.toLowerCase());
-        if (inG && !has) g.members.push(lb.name);
-        if (!inG && has) g.members = g.members.filter((m) => m.toLowerCase() !== lb.name.toLowerCase());
-      }
-      ops.push({ op: "set_groups", groups });
-    }
+    if (E.groupsChanged()) ops.push({ op: "set_logbook_groups", name: lb.name, groups: E.groups });
     if (await commit(ops, `Edit logbook '${lb.name}'`)) S.editor = null;
   };
 
@@ -689,20 +756,29 @@ function viewLogbook(r) {
     content);
 }
 
-function field(E, key, label, hint, rerender, opts = {}) {
-  const g = globalVal(key);
-  const inp = h(opts.textarea ? "textarea" : "input", { value: E.get(key) || "", type: opts.type,
-    placeholder: g !== undefined ? `inherits global: ${g}` : opts.placeholder || "",
-    onchange: (e) => { E.set(key, e.target.value.trim()); rerender(); } });
-  return h("label", {}, h("span", {}, label, " ", hint ? h("span", { class: "hint" }, hint) : null), inp);
-}
-function triState(E, key, label, rerender) {
+/** Editor for one option, typed from the catalog; shows the inherited/default value as placeholder. */
+function optField(E, key, rerender, opts = {}) {
+  const o = optLookup(key) || { type: "string", desc: "", spec: "" };
   const v = E.get(key);
-  const g = globalVal(key);
-  return h("label", {}, label, h("select", { onchange: (e) => { E.set(key, e.target.value); rerender(); } },
-    h("option", { value: "", selected: v === undefined }, `inherit${g !== undefined ? ` (global: ${g === "1" ? "yes" : "no"})` : ""}`),
-    h("option", { value: "1", selected: v === "1" }, "yes"),
-    h("option", { value: "0", selected: v === "0" }, "no")));
+  const inh = inherited(key, opts.fromGlobal !== false);
+  const ph = inh ? `${inh.from}: ${o.type === "bool" ? yesNo(inh.value) : inh.value}` : (opts.placeholder || "");
+  const set = (val) => { E.set(key, val); rerender(); };
+  let input;
+  if (o.type === "bool" || o.type === "enum") {
+    const values = o.type === "bool" ? [["1", "yes"], ["0", "no"]] : o.values.map((x) => [x, x]);
+    input = h("select", { disabled: opts.disabled, onchange: (e) => set(e.target.value) },
+      h("option", { value: "", selected: v === undefined || v === "" }, inh ? `${ph} (not set here)` : "not set"),
+      values.map(([val, label]) => h("option", { value: val, selected: v !== undefined && v.toLowerCase() === val.toLowerCase() }, label)));
+  } else {
+    input = h(opts.textarea ? "textarea" : "input", { value: v || "", disabled: opts.disabled, placeholder: ph,
+      type: o.type === "number" ? "number" : null, step: o.type === "number" ? "any" : null,
+      onchange: (e) => set(e.target.value.trim()) });
+  }
+  const hint = opts.hint || o.desc;
+  return h("label", { style: opts.wide ? "grid-column:1/-1" : null, title: o.spec ? `${key} = ${o.spec}` : null },
+    h("span", {}, opts.label || key, " ", hint ? h("span", { class: "hint" }, hint) : null,
+      o.doc ? [" ", h("a", { class: "hint", href: o.doc, target: "_blank", rel: "noopener", title: "ELOG documentation" }, "?")] : null),
+    input);
 }
 
 function tabOverview(E, rerender) {
@@ -712,20 +788,15 @@ function tabOverview(E, rerender) {
     chipInput(E.list(key), BUILTIN.concat(attrNames), (v) => { E.setList(key, v); rerender(); }));
   return h("div", { class: "card" },
     h("div", { class: "grid2" },
-      h("div", { style: "grid-column:1/-1" }, field(E, "Comment", "Comment", "shown on the logbook selection page", rerender)),
-      field(E, "Page title", "Page title", "e.g. ELOG - $subject", rerender),
-      field(E, "Thread display", "Thread display", "$Subject ($Category)…", rerender),
-      field(E, "Entries per page", "Entries per page", "", rerender, { type: "number" }),
-      field(E, "Refresh", "Auto refresh", "seconds, 0 = off", rerender, { type: "number" }),
-      field(E, "Restrict edit time", "Restrict edit time", "hours after which entries cannot be edited", rerender, { type: "number" }),
-      triState(E, "Reverse sort", "Newest entries first", rerender),
-      triState(E, "Allow HTML", "Allow HTML in entries", rerender),
-      field(E, "Subdir", "Data subdirectory", "default: the logbook name", rerender, { placeholder: "(logbook name)" }),
+      (S.opts.common || []).map((key) => optField(E, key, rerender, {
+        wide: key === "Comment" || key === "Preset text",
+        disabled: key === "Subdir" && !isSuper(),
+        placeholder: key === "Subdir" ? E.name : undefined })),
       listChips("Quick filter", "Quick filter", "filter boxes above the entry list"),
       listChips("List display", "List display", "columns of the entry list; empty = all attributes"),
-      isSuper() ? h("div", { style: "grid-column:1/-1" }, h("b", {}, "Groups"), h("div", { class: "row", style: "margin-top:6px" },
+      h("div", { style: "grid-column:1/-1" }, h("b", {}, "Groups ", h("span", { class: "hint" }, "where it appears on ELOG's start page")), h("div", { class: "row", style: "margin-top:6px" },
         S.state.groups.map((g) => h("label", { class: "inline" }, h("input", { type: "checkbox", checked: E.groups.includes(g.name),
-          onchange: (e) => { E.groups = e.target.checked ? [...E.groups, g.name] : E.groups.filter((x) => x !== g.name); rerender(); } }), g.name)))) : null));
+          onchange: (e) => { E.groups = e.target.checked ? [...E.groups, g.name] : E.groups.filter((x) => x !== g.name); rerender(); } }), g.name))))));
 }
 
 function tabAccess(E, rerender) {
@@ -740,17 +811,31 @@ function tabAccess(E, rerender) {
     h("label", { style: "margin-top:12px" }, h("span", {}, "Admin users ", h("span", { class: "hint" }, "may change this logbook's config here and in ELOG")),
       chipInput(admin, userNames(), (v) => { E.setList("Admin user", v); rerender(); }, { validate })),
     h("div", { class: "grid2", style: "margin-top:16px" },
-      triState(E, "Restrict edit", "Users can only edit their own entries", rerender),
-      field(E, "Allow Delete", "Allow Delete", "users allowed to delete entries", rerender),
-      field(E, "Guest menu commands", "Guest menu commands", "set to allow anonymous read access", rerender, { placeholder: "(no guest access)" })),
+      optField(E, "Restrict edit", rerender),
+      optField(E, "Restrict edit time", rerender),
+      optField(E, "Allow Delete", rerender, { hint: "users allowed to delete entries" }),
+      optField(E, "Guest menu commands", rerender, { placeholder: "(no guest access)" })),
     validate ? null : h("p", { class: "muted" }, "Password file not readable: user names are not validated."));
 }
 
 function tabAttributes(E, rerender) {
   const attrs = E.attrs();
-  const row = (a, i) => h("tr", {},
+  const isAuthor = (a) => a.name.toLowerCase() === "author";
+  const authorPreset = inherited("Preset Author");
+  const row = (a, i) => isAuthor(a) ? h("tr", { title: "Required in every logbook: filled in automatically and locked" },
+    h("td", {}, h("input", { value: a.name, readonly: true })),
+    h("td", { colspan: 3, class: "muted" }, "🔒 Required in every logbook: filled in automatically, users cannot change it"),
+    h("td", {}), h("td", { class: "c" }, h("input", { type: "checkbox", checked: true, disabled: true })), h("td", {}),
+    h("td", {}, h("input", { value: a.preset, placeholder: authorPreset ? `${authorPreset.from}: ${authorPreset.value}` : "$long_name",
+      title: "$long_name = full name, $short_name = login name",
+      onchange: (e) => { E.setAttrProp(a, "preset", e.target.value.trim()); rerender(); } })),
+    h("td", {}, h("input", { value: a.comment, onchange: (e) => { E.setAttrProp(a, "comment", e.target.value.trim()); rerender(); } })),
+    h("td", { style: "white-space:nowrap" },
+      h("button", { class: "link", disabled: i === 0, title: "Move up", onclick: () => { const l = E.list("Attributes"); [l[i - 1], l[i]] = [l[i], l[i - 1]]; E.setList("Attributes", l); rerender(); } }, "↑")))
+  : h("tr", {},
     h("td", {}, h("input", { value: a.name, onchange: (e) => {
       const n = e.target.value.trim(); if (!n || n === a.name) return;
+      if (n.toLowerCase() === "author") { toast("Author already exists in every logbook", true); return rerender(); }
       if (attrs.some((x) => x.name.toLowerCase() === n.toLowerCase())) { toast("Attribute exists", true); return rerender(); }
       E.renameAttr(a.name, n); rerender(); } })),
     h("td", {}, h("select", { onchange: (e) => { E.setAttrProp(a, "optKind", e.target.value); rerender(); } },
@@ -778,6 +863,8 @@ function tabAttributes(E, rerender) {
       if (attrs.some((x) => x.name.toLowerCase() === n.toLowerCase())) return toast("Attribute exists", true);
       const l = E.list("Attributes"); const si = l.findIndex((x) => x.toLowerCase() === "subject");
       si >= 0 ? l.splice(si, 0, n) : l.push(n); E.setList("Attributes", l); rerender(); } }, "Add attribute")),
+    !attrs.some(isAuthor) && attrs.length ? h("p", { class: "issue error" }, "This logbook has no Author attribute. ",
+      h("button", { onclick: () => { const l = E.list("Attributes"); E.setList("Attributes", ["Author", ...l]); rerender(); } }, "Add Author")) : null,
     h("p", { class: "hint" }, "Renaming updates every setting that refers to the attribute, including $name in titles. ",
       "Conditional settings like {1} Subst SN are kept and can be edited under All settings. ",
       "Extendable lets users add new option values when writing an entry."));
@@ -787,14 +874,30 @@ function kvTable(E, rerender, inherit) {
   const origMap = new Map(E.orig.map(([k, v]) => [norm(k), v]));
   const keyInp = h("input", { placeholder: "Setting name", list: "kv-keys" });
   const valInp = h("input", { placeholder: "Value" });
-  const allKeys = [...new Set(S.state.logbooks.flatMap((l) => l.items.map(([k]) => k)).concat(S.state.global.map(([k]) => k)))].sort();
+  const spec = h("span", { class: "hint" });
+  keyInp.addEventListener("input", () => {
+    const o = optLookup(keyInp.value);
+    const inh = o && inherited(keyInp.value, !!inherit);
+    spec.textContent = o ? `${o.name} = ${o.spec}${o.desc ? " · " + o.desc : ""}` : keyInp.value.trim() ? "not in ELOG's option reference" : "";
+    valInp.placeholder = inh ? `${inh.from}: ${inh.value}` : o ? o.spec : "Value";
+  });
+  const scope = inherit ? (o) => o.scope !== "global" : () => true;
+  const catalogKeys = S.opts.list.filter((o) => !o.pattern && scope(o)).map((o) => o.name);
+  const allKeys = [...new Set(catalogKeys.concat(E.items.map(([k]) => k)))].sort((a, b) => a.localeCompare(b));
   return h("div", { class: "card" },
     h("table", { class: "kv" }, h("tbody", {}, E.items.map(([k, v], i) => {
       if (E.hideKey && E.hideKey(k)) return null;
       const changed = origMap.get(norm(k)) !== v;
+      const o = optLookup(k);
+      const inh = inherited(k, !!inherit);
       return h("tr", { class: changed ? "changed" : "" },
-        h("td", {}, h("input", { value: k, onchange: (e) => { const nk = e.target.value.trim(); if (nk) E.items[i][0] = nk; rerender(); } })),
-        h("td", {}, h("input", { value: v, onchange: (e) => { E.items[i][1] = e.target.value.trim(); rerender(); } })),
+        h("td", {}, h("div", { class: "row", style: "flex-wrap:nowrap" },
+          h("input", { value: k, title: o ? `${o.name} = ${o.spec}${o.desc ? "\n" + o.desc : ""}` : "Not in ELOG's option reference",
+            onchange: (e) => { const nk = e.target.value.trim(); if (nk) E.items[i][0] = nk; rerender(); } }),
+          o ? (o.doc ? h("a", { class: "hint", href: o.doc, target: "_blank", rel: "noopener", title: "ELOG documentation" }, "?") : null)
+            : h("span", { class: "badge", title: "Not in ELOG's option reference: check the spelling" }, "?"))),
+        h("td", {}, h("input", { value: v, placeholder: inh ? `${inh.from}: ${inh.value}` : o ? o.spec : "",
+          onchange: (e) => { E.items[i][1] = e.target.value.trim(); rerender(); } })),
         h("td", { style: "width:1%" }, h("button", { class: "link", style: "color:var(--danger)", title: "Delete setting",
           onclick: () => { E.items.splice(i, 1); rerender(); } }, "×")));
     }))),
@@ -803,8 +906,11 @@ function kvTable(E, rerender, inherit) {
       if (E.get(k) !== undefined) return toast("Setting already exists; edit it above", true);
       E.items.push([k, valInp.value.trim()]); rerender(); } }, "Add setting"),
       inherit ? h("span", { class: "hint" }, "Settings not listed here inherit from [global].") : null),
-    h("datalist", { id: "kv-keys" }, allKeys.map((k) => h("option", { value: k }))),
-    h("p", { class: "hint" }, "Reference: ", h("a", { href: "https://elog.psi.ch/elog/config.html", target: "_blank", rel: "noopener" }, "elogd.cfg options")));
+    h("div", { style: "margin-top:4px" }, spec),
+    h("datalist", { id: "kv-keys" }, allKeys.map((k) => { const o = optLookup(k); return h("option", { value: k }, o && o.desc ? o.desc : ""); })),
+    h("p", { class: "hint" }, `${S.opts.list.length} options from `,
+      h("a", { href: "https://elog.psi.ch/elog/config.html", target: "_blank", rel: "noopener" }, "ELOG's option reference"),
+      ". Pattern options like Options <attribute> are set per attribute on the Attributes tab."));
 }
 
 function tabRaw(lb) {
@@ -1075,7 +1181,6 @@ $("#logout").addEventListener("click", async () => { await api("POST", apiUrl("/
 async function start() {
   const me = await api("GET", apiUrl("/api/me"));
   if (!me.user) return showLogin();
-  if (!me.role) { showLogin(); $("#login-error").textContent = `'${me.user}' is not allowed to manage this ELOG.`; return; }
   $("#login").hidden = true;
   $("#topbar").hidden = false;
   try { await reload(); } catch (e) { toast(e.message, true); }

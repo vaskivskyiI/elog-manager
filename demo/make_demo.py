@@ -2,11 +2,11 @@
 
 Every user name found in the config gets the password "demo" (except the
 deliberately misspelled ones, so the linter has something to report).
+"grace" has no logbooks yet, to show what a new user sees.
 
     python demo/make_demo.py
-    python -m elogmgr --settings demo/settings.json
+    python -m elogmgr --env-file demo/.env
 """
-import json
 import os
 import shutil
 import sys
@@ -19,14 +19,18 @@ from elogmgr.elogpwd import sha256_crypt  # noqa: E402
 HERE = os.path.join(ROOT, "demo")
 TYPOS = {"alcie", "Bob"}
 
-cfg_path = os.path.join(HERE, "elogd.cfg")
-shutil.copy(os.path.join(ROOT, "examples", "elogd.sample.cfg"), cfg_path)
-cfg = ElogConfig(open(cfg_path, encoding="utf-8").read())
+cfg = ElogConfig(open(os.path.join(ROOT, "examples", "elogd.sample.cfg"), encoding="utf-8").read())
+# point the demo at its own password file (relative paths are relative to Logbook dir, as in elogd)
+cfg.global_.set("Logbook dir", HERE)
+cfg.global_.set("password file", "passwords.pwd")
+with open(os.path.join(HERE, "elogd.cfg"), "w", encoding="utf-8", newline="") as f:
+    f.write(cfg.text())
+
 names = set()
 for s in cfg.sections:
     for key in ("Login user", "Admin user"):
         names.update(s.get_list(key))
-names = sorted((names - TYPOS) | {"alice", "bob"}, key=str.lower)
+names = sorted((names - TYPOS) | {"alice", "bob", "grace"}, key=str.lower)
 
 pw = sha256_crypt("demo")
 users = "".join(
@@ -37,17 +41,11 @@ users = "".join(
 with open(os.path.join(HERE, "passwords.pwd"), "w", encoding="utf-8") as f:
     f.write(f'<?xml version="1.0" encoding="ISO-8859-1"?>\n<list>\n{users}</list>\n')
 
-with open(os.path.join(HERE, "settings.json"), "w", encoding="utf-8") as f:
-    json.dump({
-        "elogd_cfg": "elogd.cfg",
-        "password_file": "passwords.pwd",
-        "backup_dir": "backups",
-        "secret_key": "demo-only-not-secret",
-        "secure_cookies": False,
-        "reload_mode": "none",
-        "elog_url": "https://elog.example.org/",
-        "host": "127.0.0.1",
-        "port": 8090,
-    }, f, indent=2)
-print(f"Demo ready: {len(names)} users with password 'demo'. Log in as alice (manager admin) "
-      "or bob (logbook admin).")
+with open(os.path.join(HERE, ".env"), "w", encoding="utf-8") as f:
+    f.write("ELOGD_CFG=elogd.cfg\n"
+            "ELOGMGR_STATE_DIR=state\n"
+            "ELOGMGR_BEHIND_PROXY=0\n"
+            "ELOGMGR_RELOAD=none\n"
+            "ELOGMGR_ELOG_URL=https://elog.example.org/\n")
+print(f"Demo ready: {len(names)} users with password 'demo'. Log in as alice (manager), "
+      "bob (logbook admin) or grace (new user without logbooks).")

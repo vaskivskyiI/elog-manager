@@ -118,6 +118,8 @@ tr.changed td { background: var(--warn-soft); }
 .issue { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; }
 .issue.error { background: var(--danger-soft); } .issue.warning { background: var(--warn-soft); }
 .issue.info { background: var(--info-soft); }
+.issue.ok { background: var(--ok-soft); color: var(--ok); }
+.modal .issue { margin-bottom: 10px; }
 .issue .lvl { font-size: 11px; font-weight: 700; text-transform: uppercase; width: 60px; flex-shrink: 0; padding-top: 2px; }
 .issue.error .lvl { color: var(--danger); } .issue.warning .lvl { color: var(--warn); } .issue.info .lvl { color: var(--muted); }
 .issue .msg { flex: 1; }

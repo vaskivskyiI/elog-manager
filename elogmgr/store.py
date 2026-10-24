@@ -22,12 +22,13 @@ class ConflictError(Exception):
 class Store:
     def __init__(self, settings: dict):
         self.cfg_path = settings["elogd_cfg"]
-        self.pwd_path = settings.get("password_file") or None
-        self.backup_dir = settings.get("backup_dir") or os.path.join(os.path.dirname(self.cfg_path), "cfg-backups")
-        self.audit_path = settings.get("audit_log") or os.path.join(self.backup_dir, "audit.jsonl")
-        self.keep_backups = int(settings.get("keep_backups", 200))
+        self.pwd_override = settings.get("password_file") or None  # tests; normally from elogd.cfg
+        self.state_dir = settings.get("state_dir") or os.path.join(os.path.dirname(self.cfg_path), "elog-manager")
+        self.backup_dir = os.path.join(self.state_dir, "backups")
+        self.audit_path = os.path.join(self.state_dir, "audit.jsonl")
+        self.keep_backups = 200
         self._lock = threading.Lock()
-        self._users_cache: tuple[float, dict] | None = None
+        self._users_cache: tuple[str, float, dict] | None = None
 
     # ---- reading -----------------------------------------------------
     def _read_raw(self) -> bytes:
@@ -50,14 +51,27 @@ class Store:
         raw = self._read_raw()
         return self._decode(raw)[0], hashlib.sha256(raw).hexdigest()[:16]
 
-    def users(self) -> dict[str, ElogUser]:
-        if not self.pwd_path or not os.path.exists(self.pwd_path):
+    def password_file(self, cfg: ElogConfig | None = None) -> str | None:
+        """'Password file' from [global]; relative paths are relative to 'Logbook dir', as in elogd."""
+        if self.pwd_override:
+            return self.pwd_override
+        cfg = cfg or self.load()[0]
+        pf = cfg.global_.get("Password file")
+        if not pf:
+            return None
+        if os.path.isabs(pf):
+            return pf
+        return os.path.join(cfg.global_.get("Logbook dir") or os.path.dirname(self.cfg_path), pf)
+
+    def users(self, cfg: ElogConfig | None = None) -> dict[str, ElogUser]:
+        path = self.password_file(cfg)
+        if not path or not os.path.exists(path):
             return {}
-        mtime = os.path.getmtime(self.pwd_path)
-        if self._users_cache and self._users_cache[0] == mtime:
-            return self._users_cache[1]
-        users = load_users(self.pwd_path)
-        self._users_cache = (mtime, users)
+        mtime = os.path.getmtime(path)
+        if self._users_cache and self._users_cache[:2] == (path, mtime):
+            return self._users_cache[2]
+        users = load_users(path)
+        self._users_cache = (path, mtime, users)
         return users
 
     # ---- writing -----------------------------------------------------

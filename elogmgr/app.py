@@ -1,10 +1,8 @@
 """ELOG Manager: a web GUI for editing elogd.cfg."""
 from __future__ import annotations
 
-import json
 import os
 import re
-import secrets
 import time
 from collections import defaultdict
 from datetime import timedelta
@@ -13,74 +11,67 @@ from functools import wraps
 from flask import Flask, abort, jsonify, request, send_from_directory, session
 
 from .elogcfg import ElogConfig, Line, join_list, norm
-from .lint import lint
+from .lint import author_problem, ensure_author, lint
+from .options import COMMON, catalog
 from .reload import reload_elogd
+from .settings import from_env, load_env_file, secret_key
 from .store import ConflictError, Store, unified_diff
+from .templates import PREFIX as TEMPLATE_PREFIX, TEMPLATES, builtin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAME_RE = re.compile(r"^[^\[\],=#;/\\]+$")
-COPY_SKIP = {"subdir", "comment"}
+COPY_SKIP = {"subdir", "comment", "login user", "admin user"}
+# [global] keys not shown to non-managers (paths, mail, network, accounts)
+PRIVATE_GLOBAL = re.compile(r"^(password file|logbook dir|resource dir|logfile|smtp|usr|grp|port|interface|"
+                            r"url|mirror|ssl|certificate|admin user|use email|self register|group |top group )",
+                            re.I)
 
 
 class OpError(Exception):
     pass
 
 
-def load_settings() -> dict:
-    path = os.environ.get("ELOGMGR_SETTINGS", os.path.join(os.getcwd(), "settings.json"))
-    with open(path, encoding="utf-8") as f:
-        s = json.load(f)
-    base = os.path.dirname(os.path.abspath(path))
-    for k in ("elogd_cfg", "password_file", "backup_dir", "audit_log"):
-        if s.get(k) and not os.path.isabs(s[k]):
-            s[k] = os.path.join(base, s[k])
-    return s
-
-
 def create_app(settings: dict | None = None) -> Flask:
-    settings = settings or load_settings()
+    settings = settings or from_env()
+    store = Store(settings)
+    cfg0, _ = store.load()
+    try:  # ELOG's own session length, in hours
+        session_hours = float(cfg0.global_.get("Login expiration") or 12)
+    except ValueError:
+        session_hours = 12
     app = Flask(__name__, static_folder=None)
     app.config.update(
-        SECRET_KEY=settings.get("secret_key") or secrets.token_hex(32),
+        SECRET_KEY=settings.get("secret_key") or secret_key(store.state_dir),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=bool(settings.get("secure_cookies", True)),
         SESSION_COOKIE_NAME="elogmgr",
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=float(settings.get("session_hours", 12))),
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=session_hours),
     )
     if settings.get("behind_proxy"):
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
-    if not settings.get("password_file"):
-        cfg, _ = Store(settings).load()
-        pf = cfg.global_.get("Password file")
-        if pf:
-            settings["password_file"] = pf if os.path.isabs(pf) else os.path.join(
-                cfg.global_.get("Logbook dir", os.path.dirname(settings["elogd_cfg"])), pf)
-    store = Store(settings)
     failures: dict[str, list[float]] = defaultdict(list)
+    auth_header = settings.get("auth_header") or ""
 
     # ---- roles ---------------------------------------------------------
-    def super_admins(cfg: ElogConfig) -> set[str]:
-        explicit = settings.get("manager_admins")
-        return set(explicit) if explicit else set(cfg.global_.get_list("Admin user"))
+    # super (manager): [global] Admin user - everything
+    # logbook_admin: in some logbook's Admin user - those logbooks, plus creating new ones
+    # user: any other ELOG account - can create logbooks and becomes their admin
+    def managers(cfg: ElogConfig) -> set[str]:
+        return set(cfg.global_.get_list("Admin user"))
 
     def admin_logbooks(cfg: ElogConfig, user: str) -> list[str]:
         return [s.name for s in cfg.logbook_sections() if user in s.get_list("Admin user")]
 
-    def role_of(cfg: ElogConfig, user: str) -> str | None:
-        allowed = settings.get("allowed_users")
-        if allowed and user not in allowed:
-            return None
-        if user in super_admins(cfg):
+    def role_of(cfg: ElogConfig, user: str) -> str:
+        if user in managers(cfg):
             return "super"
-        if settings.get("allow_logbook_admins", True) and admin_logbooks(cfg, user):
-            return "logbook_admin"
-        return None
+        return "logbook_admin" if admin_logbooks(cfg, user) else "user"
 
     def current_user() -> str | None:
-        if settings.get("auth_mode") == "header":
-            return request.headers.get(settings.get("auth_header", "X-Remote-User")) or None
+        if auth_header:
+            return request.headers.get(auth_header) or None
         return session.get("user")
 
     def require_login(fn):
@@ -92,10 +83,7 @@ def create_app(settings: dict | None = None) -> Flask:
             if request.method != "GET" and request.headers.get("X-Requested-With") != "elogmgr":
                 return jsonify(error="Missing CSRF header"), 403
             cfg, etag = store.load()
-            role = role_of(cfg, user)
-            if role is None:
-                return jsonify(error=f"User '{user}' is not allowed to manage this ELOG"), 403
-            return fn(user, role, cfg, etag, *a, **kw)
+            return fn(user, role_of(cfg, user), cfg, etag, *a, **kw)
         return wrapper
 
     # ---- static -------------------------------------------------------
@@ -110,7 +98,7 @@ def create_app(settings: dict | None = None) -> Flask:
     # ---- auth ---------------------------------------------------------
     @app.post("/api/login")
     def login():
-        if settings.get("auth_mode") == "header":
+        if auth_header:
             return jsonify(error="Login is handled by the web server"), 400
         ip = request.remote_addr or "?"
         now = time.time()
@@ -124,10 +112,6 @@ def create_app(settings: dict | None = None) -> Flask:
         if not u or not u.check(pw):
             failures[ip].append(now)
             return jsonify(error="Wrong user name or password"), 401
-        cfg, _ = store.load()
-        if role_of(cfg, name) is None:
-            return jsonify(error=f"'{name}' is not a manager. Ask an ELOG admin to add you as "
-                                 "admin of a logbook or to the manager_admins list."), 403
         session.clear()
         session.permanent = True
         session["user"] = name
@@ -143,31 +127,36 @@ def create_app(settings: dict | None = None) -> Flask:
     def me():
         user = current_user()
         if not user:
-            return jsonify(user=None, auth_mode=settings.get("auth_mode", "password_file"))
+            return jsonify(user=None, auth_mode="header" if auth_header else "password_file")
         cfg, _ = store.load()
         return jsonify(user=user, role=role_of(cfg, user))
 
     # ---- state --------------------------------------------------------
     def build_state(user, role, cfg, etag):
-        users = store.users()
+        users = store.users(cfg)
+        is_super = role == "super"
         mine = set(admin_logbooks(cfg, user))
-        logbooks = []
-        for s in cfg.logbook_sections():
-            logbooks.append({
-                "name": s.name,
-                "items": s.items(),
-                "groups": cfg.groups_of(s.name),
-                "editable": role == "super" or s.name in mine,
-            })
-        issues = lint(cfg, users or None)
+        visible = {s.name.lower() for s in cfg.logbook_sections() if is_super or s.name in mine}
+        lb_names = {n.lower() for n in cfg.logbook_names()}
+        logbooks = [{"name": s.name, "items": s.items(), "groups": cfg.groups_of(s.name), "editable": True}
+                    for s in cfg.logbook_sections() if s.name.lower() in visible]
+        groups = cfg.groups()
+        if not is_super:  # the group structure is shared; only the user's own logbooks are listed in it
+            for g in groups:
+                g["members"] = [m for m in g["members"] if m.lower() in visible or m.lower() not in lb_names]
+        issues = [i for i in lint(cfg, users or None) if is_super or i["section"].lower() in visible]
+        glob = [kv for kv in cfg.global_.items() if is_super or not PRIVATE_GLOBAL.match(kv[0])]
+        user_list = [u.public() if is_super else {"name": u.name, "full_name": u.full_name}
+                     for u in sorted(users.values(), key=lambda u: u.name.lower())]
         return {
             "etag": etag,
             "me": {"name": user, "role": role},
-            "global": cfg.global_.items(),
-            "groups": cfg.groups(),
+            "global": glob,
+            "groups": groups,
             "logbooks": logbooks,
-            "users": [u.public() for u in sorted(users.values(), key=lambda u: u.name.lower())],
+            "users": user_list,
             "issues": issues,
+            "templates": [TEMPLATE_PREFIX + t for t in TEMPLATES],
             "elog_url": settings.get("elog_url") or cfg.global_.get("URL") or "",
         }
 
@@ -180,9 +169,26 @@ def create_app(settings: dict | None = None) -> Flask:
     @require_login
     def section_text(user, role, cfg, etag, name):
         sec = cfg.section(name)
-        if not sec:
+        if not sec or (role != "super" and sec.name not in admin_logbooks(cfg, user)):
             abort(404)
         return jsonify(text=sec.text(), etag=etag)
+
+    @app.get("/api/options")
+    @require_login
+    def options(user, role, cfg, etag):
+        return jsonify(options=catalog(), common=COMMON)
+
+    @app.get("/api/check_name")
+    @require_login
+    def check_name(user, role, cfg, etag):
+        """Is a logbook name free (among all logbooks, also ones the user cannot see)? Next name in a group?"""
+        name = " ".join(request.args.get("name", "").split())
+        group = request.args.get("group", "")
+        out = {"suggestion": next_name(cfg, group) if group else None}
+        if name:
+            out["available"] = not name_taken(cfg, name)
+            out["valid"] = bool(NAME_RE.match(name)) and not name.lower().startswith("global")
+        return jsonify(out)
 
     @app.get("/api/raw")
     @require_login
@@ -201,7 +207,7 @@ def create_app(settings: dict | None = None) -> Flask:
 
     def need_super(role):
         if role != "super":
-            raise OpError("Only ELOG manager admins can do this")
+            raise OpError("Only ELOG managers ([global] Admin user) can do this")
 
     def sec_or_fail(cfg, name):
         s = cfg.section(name)
@@ -215,8 +221,33 @@ def create_app(settings: dict | None = None) -> Flask:
             raise OpError(f"Invalid name '{name}': avoid [ ] , = # ; / \\ and the prefix 'global'")
         return name
 
+    def name_taken(cfg: ElogConfig, name: str) -> bool:
+        return bool(cfg.section(name)) or any(g["name"].lower() == name.lower() for g in cfg.groups())
+
+    def next_name(cfg: ElogConfig, group: str) -> str | None:
+        """Next free name in a numbered series (np001..np010 -> np011), from all logbooks of the group."""
+        g = next((g for g in cfg.groups() if g["name"].lower() == group.lower()), None)
+        if not g:
+            return None
+        series: dict[str, list[tuple[int, int]]] = {}
+        for m in g["members"]:
+            mm = re.fullmatch(r"(.*?)(\d+)", m)
+            if mm and cfg.section(m):
+                series.setdefault(mm.group(1), []).append((int(mm.group(2)), len(mm.group(2))))
+        if not series:
+            return None
+        prefix, nums = max(series.items(), key=lambda kv: (len(kv[1]), max(kv[1])))
+        n, width = max(nums)[0] + 1, max(w for _, w in nums)
+        while name_taken(cfg, f"{prefix}{n:0{width}d}"):
+            n += 1
+        return f"{prefix}{n:0{width}d}"
+
     def apply_op(cfg: ElogConfig, op: dict, user: str, role: str, orig: ElogConfig) -> ElogConfig:
         kind = op.get("op")
+        if kind == "ensure_author":
+            check_section_perm(orig, user, role, op["section"])
+            ensure_author(cfg, sec_or_fail(cfg, op["section"]))
+            return cfg
         if kind in ("set", "delete_key", "rename_key", "list_add", "list_remove", "section_text"):
             check_section_perm(orig, user, role, op["section"])
             sec = sec_or_fail(cfg, op["section"])
@@ -260,17 +291,31 @@ def create_app(settings: dict | None = None) -> Flask:
                     sec.lines.append(Line(""))
             return cfg
 
-        need_super(role)
-        if kind == "create_logbook":
+        if kind == "create_logbook":  # anyone; the creator becomes admin
             name = valid_name(op["name"])
-            if cfg.section(name):
-                raise OpError(f"Logbook '{name}' already exists")
+            if name_taken(cfg, name):
+                raise OpError(f"A logbook or group called '{name}' already exists")
             items: list[tuple[str, str]] = []
-            tpl = op.get("template")
-            if tpl:
+            tpl = op.get("template") or None
+            if tpl and builtin(tpl) is not None:
+                items = list(builtin(tpl))
+                tpl = None
+            elif tpl:
+                if role != "super" and tpl not in admin_logbooks(orig, user):
+                    raise OpError(f"You can only copy logbooks you administer, not '{tpl}'")
                 items = [(k, v) for k, v in sec_or_fail(cfg, tpl).items() if norm(k) not in COPY_SKIP]
-            items = [("Comment", str(op.get("comment", "")).strip())] + items
-            for k, v in (op.get("set") or {}).items():
+            comment = str(op.get("comment", "")).strip()
+            items = ([("Comment", comment)] if comment else []) + items
+            extra = dict(op.get("set") or {})
+            if role != "super":
+                if any(norm(k) == "subdir" for k in extra):
+                    raise OpError("Only managers can set Subdir")
+                admins = [u.strip() for u in (extra.get("Admin user") or "").split(",") if u.strip()]
+                extra["Admin user"] = join_list([user] + [a for a in admins if a != user])
+                logins = [u.strip() for u in (extra.get("Login user") or "").split(",") if u.strip()]
+                if logins and user not in logins:
+                    extra["Login user"] = join_list([user] + logins)
+            for k, v in extra.items():
                 items = [(ik, iv) for ik, iv in items if norm(ik) != norm(k)]
                 if v is not None:
                     items.append((k, v))
@@ -282,20 +327,43 @@ def create_app(settings: dict | None = None) -> Flask:
                     raise OpError(f"No group '{group}'")
                 existing = [m for m in g["members"] if cfg.section(m)]
                 after = existing[-1] if existing else None
-            cfg.add_section(name, items, after=after or (tpl if tpl else None))
+            new_sec = cfg.add_section(name, items, after=after or (tpl if tpl else None))
+            ensure_author(cfg, new_sec)  # policy: locked, prefilled Author in every logbook
             if group:
                 groups = cfg.groups()
                 for g in groups:
                     if g["name"].lower() == group.lower():
                         g["members"].append(name)
                 cfg.set_groups(groups)
-        elif kind == "delete_logbook":
+            return cfg
+
+        if kind == "set_logbook_groups":  # place one logbook in groups; other members untouched
+            check_section_perm(orig, user, role, op["name"])
+            name = sec_or_fail(cfg, op["name"]).name
+            want = {str(g).lower() for g in op.get("groups", [])}
+            groups = cfg.groups()
+            unknown = want - {g["name"].lower() for g in groups}
+            if unknown:
+                raise OpError(f"No group '{sorted(unknown)[0]}'")
+            for g in groups:
+                has = any(m.lower() == name.lower() for m in g["members"])
+                if g["name"].lower() in want and not has:
+                    g["members"].append(name)
+                elif g["name"].lower() not in want and has:
+                    g["members"] = [m for m in g["members"] if m.lower() != name.lower()]
+            cfg.set_groups(groups)
+            return cfg
+
+        need_super(role)
+        if kind == "delete_logbook":
             name = sec_or_fail(cfg, op["name"]).name
             cfg.remove_section(name)
             cfg.replace_group_member(name, None)
         elif kind == "rename_logbook":
             sec = sec_or_fail(cfg, op["name"])
             old, new = sec.name, valid_name(op["new"])
+            if new.lower() != old.lower() and (name_taken(cfg, new)):
+                raise OpError(f"A logbook or group called '{new}' already exists")
             cfg.rename_section(old, new)
             if op.get("keep_data", True) and not sec.get("Subdir"):
                 # entries live in <Logbook dir>/<old name>; keep pointing there
@@ -354,14 +422,33 @@ def create_app(settings: dict | None = None) -> Flask:
         except (OpError, KeyError, ValueError, FileNotFoundError) as e:
             return jsonify(error=str(e).strip("'\"")), 400
         new_text = new_cfg.text()
-        users = store.users() or None
-        before = {(i["section"], i["message"]) for i in lint(orig, users)}
+        users = store.users(orig) or None
+        # issues the logbook already had are not "new" just because it was renamed
+        renames = {o["name"].lower(): " ".join(str(o.get("new", "")).split())
+                   for o in ops if o.get("op") == "rename_logbook" and o.get("name")}
+        before = set()
+        for i in lint(orig, users):
+            sec, msg = i["section"], i["message"]
+            new_name = renames.get(sec.lower())
+            if new_name:
+                sec, msg = new_name, msg.replace(f"'{i['section']}'", f"'{new_name}'")
+            before.add((sec, msg))
         new_issues = [i for i in lint(new_cfg, users) if (i["section"], i["message"]) not in before]
-        if role != "super" and not admin_logbooks(new_cfg, user) and not data.get("confirm_lockout"):
-            return jsonify(error="This change would remove you as admin of all your logbooks; "
-                                 "you would lose access to the manager."), 400
+        warnings = []
+        if role != "super":
+            lost = sorted(set(admin_logbooks(orig, user)) - set(admin_logbooks(new_cfg, user)))
+            if lost:
+                warnings.append(f"You will no longer be admin of {', '.join(lost)} and will not be able "
+                                "to see or edit it here afterwards.")
+        # Config check: a change may not introduce errors. Managers can override deliberately.
+        blocking = [i for i in new_issues if i["level"] == "error"]
+        can_force = role == "super"
         if data.get("dry_run"):
-            return jsonify(diff=unified_diff(old_text, new_text), new_issues=new_issues)
+            return jsonify(diff=unified_diff(old_text, new_text), new_issues=new_issues, warnings=warnings,
+                           blocking=bool(blocking), can_force=can_force)
+        if blocking and not (can_force and data.get("force")):
+            return jsonify(error="The configuration check failed: " + "; ".join(
+                f"[{i['section']}] {i['message']}" for i in blocking), new_issues=new_issues), 400
         try:
             new_etag = store.write(new_text, etag, user, data.get("summary") or ops[0].get("op"),
                                    {"ops": describe(ops)})
@@ -372,6 +459,8 @@ def create_app(settings: dict | None = None) -> Flask:
     @app.post("/api/reload")
     @require_login
     def reload(user, role, cfg, etag):
+        if role != "super":  # saves reload elogd for everyone; the manual button is for managers
+            abort(403)
         return jsonify(reload_elogd(settings))
 
     # ---- history ------------------------------------------------------
@@ -398,20 +487,20 @@ def create_app(settings: dict | None = None) -> Flask:
 
 def main():
     import argparse
-    p = argparse.ArgumentParser(description="ELOG Manager web GUI")
-    p.add_argument("--settings", help="settings.json path")
+    p = argparse.ArgumentParser(description="ELOG Manager web GUI (settings: see elogmgr/settings.py)")
+    p.add_argument("--env-file", help="read settings from this .env file (default: ./.env if present)")
     p.add_argument("--host")
     p.add_argument("--port", type=int)
     a = p.parse_args()
-    if a.settings:
-        os.environ["ELOGMGR_SETTINGS"] = a.settings
-    s = load_settings()
+    env_file = a.env_file or (".env" if os.path.exists(".env") else None)
+    if env_file:
+        load_env_file(env_file)
+    s = from_env()
     app = create_app(s)
-    host = a.host or s.get("host", "127.0.0.1")
-    port = a.port or int(s.get("port", 8090))
+    host, port = a.host or s["host"], a.port or s["port"]
     try:
         from waitress import serve
-        print(f"ELOG Manager on http://{host}:{port} (waitress)")
+        print(f"ELOG Manager on http://{host}:{port} (waitress), config {s['elogd_cfg']}")
         serve(app, host=host, port=port)
     except ImportError:
         app.run(host=host, port=port)
