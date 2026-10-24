@@ -73,25 +73,38 @@ class Store:
             if new_raw == raw:
                 return etag
             backup = self._backup(raw, user, action)
-            d = os.path.dirname(os.path.abspath(self.cfg_path))
-            fd, tmp = tempfile.mkstemp(prefix=".elogd.cfg.", dir=d)
-            try:
-                with os.fdopen(fd, "wb") as f:
+            if not self._replace_atomically(new_raw):
+                # Directory not writable, or elogd.cfg is a single bind-mounted file
+                # (Docker): rewrite it in place instead.  The backup above is the safety net.
+                with open(self.cfg_path, "r+b") as f:
                     f.write(new_raw)
-                try:
-                    shutil.copymode(self.cfg_path, tmp)
-                    st = os.stat(self.cfg_path)
-                    if hasattr(os, "chown"):
-                        os.chown(tmp, st.st_uid, st.st_gid)
-                except (OSError, PermissionError):
-                    pass
-                os.replace(tmp, self.cfg_path)
-            except Exception:
-                if os.path.exists(tmp):
-                    os.unlink(tmp)
-                raise
+                    f.truncate()
             self._audit(user, action, detail, backup)
             return hashlib.sha256(new_raw).hexdigest()[:16]
+
+    def _replace_atomically(self, data: bytes) -> bool:
+        d = os.path.dirname(os.path.abspath(self.cfg_path))
+        try:
+            fd, tmp = tempfile.mkstemp(prefix=".elogd.cfg.", dir=d)
+        except OSError:
+            return False
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            try:
+                shutil.copymode(self.cfg_path, tmp)
+                st = os.stat(self.cfg_path)
+                if hasattr(os, "chown"):
+                    os.chown(tmp, st.st_uid, st.st_gid)
+            except OSError:
+                pass
+            os.replace(tmp, self.cfg_path)
+            return True
+        except OSError:
+            return False
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
 
     def _backup(self, raw: bytes, user: str, action: str) -> str:
         os.makedirs(self.backup_dir, exist_ok=True)

@@ -1,0 +1,18 @@
+# Self-contained demo on the fictional sample config: no ELOG server needed.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   open http://127.0.0.1:8090  (alice / demo, or bob / demo)
+services:
+  elog-manager-demo:
+    build: .
+    image: elog-manager:latest
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    environment:
+      HOME: /tmp
+    volumes:
+      - ./demo:/app/demo
+      - ./examples:/app/examples:ro
+    entrypoint: ["sh", "-c", "python demo/make_demo.py && exec python -m elogmgr --settings demo/settings.json --host 0.0.0.0 --port 8090"]
+    ports:
+      - "127.0.0.1:8090:8090"

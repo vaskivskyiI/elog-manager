@@ -185,63 +185,118 @@ function chipInput(values, suggestions, onChange, opts = {}) {
 // ============================================================ LOGBOOKS VIEW
 function draftGroups() { return S.groupsDraft || S.state.groups; }
 
+const lc = (s) => s.toLowerCase();
+/** A member names a subgroup only if no logbook has that name ("Group Playground = Playground" is a logbook). */
+const asGroup = (groups, m) => (lbByName(m) ? null : groupByName(groups, m));
+
+/** Top-level groups (not a member of another group), plus groups only reachable through a cycle. */
+function topGroups(groups) {
+  const nested = new Set(groups.flatMap((g) => g.members.filter((m) => asGroup(groups, m)).map(lc)));
+  const top = groups.filter((g) => !nested.has(lc(g.name)));
+  const seen = new Set();
+  const walk = (g) => {
+    if (seen.has(lc(g.name))) return;
+    seen.add(lc(g.name));
+    for (const m of g.members) { const sub = asGroup(groups, m); if (sub) walk(sub); }
+  };
+  top.forEach(walk);
+  return top.concat(groups.filter((g) => !seen.has(lc(g.name))));
+}
+
+/** True if `name` is `ancestor` itself or appears anywhere inside it. */
+function containsGroup(groups, ancestor, name) {
+  const seen = new Set();
+  const walk = (gname) => {
+    if (lc(gname) === lc(name)) return true;
+    if (seen.has(lc(gname))) return false;
+    seen.add(lc(gname));
+    const g = groupByName(groups, gname);
+    return !!g && g.members.some((m) => asGroup(groups, m) && walk(m));
+  };
+  return walk(ancestor);
+}
+
 function viewLogbooks() {
   const groups = draftGroups();
-  const lbNames = new Set(S.state.logbooks.map((l) => l.name.toLowerCase()));
-  const groupNames = new Set(groups.map((g) => g.name.toLowerCase()));
-  const grouped = new Set(groups.flatMap((g) => g.members.map((m) => m.toLowerCase())));
+  const isGroup = (n) => !!asGroup(groups, n);
+  const grouped = new Set(groups.flatMap((g) => g.members.map(lc)));
   const issuesBy = {};
-  for (const i of S.state.issues) if (i.level !== "info") (issuesBy[i.section.toLowerCase()] ||= []).push(i);
-  const f = S.filter.toLowerCase();
-  const match = (lb) => !f || lb.name.toLowerCase().includes(f) || (getItem(lb.items, "Comment") || "").toLowerCase().includes(f)
-    || splitList(getItem(lb.items, "Login user")).some((u) => u.toLowerCase() === f);
+  for (const i of S.state.issues) if (i.level !== "info") (issuesBy[lc(i.section)] ||= []).push(i);
+  const f = lc(S.filter);
+  const match = (lb) => !f || lc(lb.name).includes(f) || lc(getItem(lb.items, "Comment") || "").includes(f)
+    || splitList(getItem(lb.items, "Login user")).some((u) => lc(u) === f);
   const canDrag = isSuper();
+  const tops = topGroups(groups);
+  S.collapsed ||= new Set();
 
-  const lbRow = (member, group) => {
+  const dropZone = (onDrop) => ({
+    ondragover: (e) => { if (!canDrag) return; e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("drop"); },
+    ondragleave: (e) => e.currentTarget.classList.remove("drop"),
+    ondrop: (e) => { e.stopPropagation(); e.currentTarget.classList.remove("drop"); onDrop(e); },
+  });
+  const arrows = (onUp, onDown, upOk, downOk, what) => canDrag ? h("span", { class: "mv" },
+    h("button", { class: "link", title: `Move ${what} up`, disabled: !upOk, onclick: (e) => { e.stopPropagation(); onUp(); } }, "↑"),
+    h("button", { class: "link", title: `Move ${what} down`, disabled: !downOk, onclick: (e) => { e.stopPropagation(); onDown(); } }, "↓")) : null;
+
+  const lbRow = (member, group, i, n) => {
     const lb = lbByName(member);
+    const mv = group ? arrows(() => moveWithin(group, i, -1), () => moveWithin(group, i, 1), i > 0, i < n - 1, "logbook") : null;
     if (!lb) {
-      const isGroup = groupNames.has(member.toLowerCase());
-      if (f && !member.toLowerCase().includes(f)) return null;
-      return h("div", { class: "lb " + (isGroup ? "subgroup" : "missing"), draggable: canDrag,
-        title: isGroup ? "Sub-group" : "This logbook does not exist",
+      if (f && !lc(member).includes(f)) return null;
+      return h("div", { class: "lb missing", draggable: canDrag, title: "This logbook does not exist",
         ondragstart: (e) => dragStart(e, member, group) },
-        h("span", { class: "name" }, member), h("span", { class: "comment" }, isGroup ? "group" : "missing logbook"),
+        mv, h("span", { class: "name" }, member), h("span", { class: "comment" }, "missing logbook"),
         group && canDrag ? h("button", { class: "link", title: "Remove from group", onclick: () => moveMember(member, group, null) }, "×") : null);
     }
     if (!match(lb)) return null;
     const login = splitList(getItem(lb.items, "Login user"));
-    const iss = issuesBy[lb.name.toLowerCase()] || [];
+    const iss = issuesBy[lc(lb.name)] || [];
     return h("div", { class: "lb" + (lb.editable ? "" : " readonly"), draggable: canDrag,
       ondragstart: (e) => dragStart(e, lb.name, group), ondragend: (e) => e.target.classList.remove("dragging"),
-      ondragover: (e) => { if (canDrag) e.preventDefault(); },
-      ondrop: (e) => { e.stopPropagation(); dropOn(e, group, lb.name); },
+      ...dropZone((e) => dropOn(e, group, lb.name)),
       ondblclick: () => lb.editable && go("logbook", lb.name) },
+      mv,
       isSuper() ? h("input", { type: "checkbox", checked: S.selected.has(lb.name), title: "Select for bulk edit",
         onclick: (e) => { e.stopPropagation(); e.target.checked ? S.selected.add(lb.name) : S.selected.delete(lb.name); render(); } }) : null,
       h("a", { class: "name", href: lb.editable ? "#/logbook/" + encodeURIComponent(lb.name) : null }, lb.name),
       h("span", { class: "comment", title: getItem(lb.items, "Comment") || "" }, getItem(lb.items, "Comment") || ""),
-      iss.length ? h("span", { class: "badge err", title: iss.map((i) => i.message).join("\n") }, iss.length + " issue" + (iss.length > 1 ? "s" : "")) : null,
+      iss.length ? h("span", { class: "badge err", title: iss.map((x) => x.message).join("\n") }, iss.length + " issue" + (iss.length > 1 ? "s" : "")) : null,
       login.length ? h("span", { class: "badge lock", title: "Restricted to: " + login.join(", ") }, "🔒 " + login.length)
         : h("span", { class: "badge", title: "No 'Login user': every registered user can access it" }, "open"));
   };
 
-  const groupCard = (g, gi) => h("div", { class: "group",
-    ondragover: (e) => { if (canDrag) { e.preventDefault(); e.currentTarget.classList.add("drop"); } },
-    ondragleave: (e) => e.currentTarget.classList.remove("drop"),
-    ondrop: (e) => { e.currentTarget.classList.remove("drop"); dropOn(e, g.name, null); } },
-    h("div", { class: "ghead" },
-      h("h3", {}, g.name, g.top ? h("span", { class: "badge", title: "Top group" }, " top") : null),
-      h("span", { class: "badge" }, g.members.length),
-      canDrag ? [
-        h("button", { class: "link", title: "Move up", disabled: gi === 0, onclick: () => moveGroup(gi, -1) }, "↑"),
-        h("button", { class: "link", title: "Move down", disabled: gi === groups.length - 1, onclick: () => moveGroup(gi, 1) }, "↓"),
-        h("button", { class: "link", onclick: () => renameGroup(g.name) }, "Rename"),
-        h("button", { class: "link", style: "color:var(--danger)", onclick: () => deleteGroup(g.name) }, "Delete"),
-        h("button", { class: "link", title: "New logbook in this group", onclick: () => newLogbook({ group: g.name }) }, "+ New"),
-      ] : null),
-    h("div", { class: "items" }, g.members.map((m) => lbRow(m, g.name))));
+  // parent: name of the containing group (null at top level); i/n: position among siblings
+  const groupCard = (g, parent, i, n, path) => {
+    const collapsed = S.collapsed.has(lc(g.name));
+    const nLogbooks = g.members.filter((m) => !isGroup(m)).length;
+    const nSub = g.members.length - nLogbooks;
+    const up = parent ? () => moveWithin(parent, i, -1) : () => moveTop(g.name, -1);
+    const down = parent ? () => moveWithin(parent, i, 1) : () => moveTop(g.name, 1);
+    const sub = path.concat(lc(g.name));
+    return h("div", { class: "group" + (parent ? " nested" : ""), ...dropZone((e) => dropOn(e, g.name, null)) },
+      h("div", { class: "ghead", draggable: canDrag, title: canDrag ? "Drag into another group to nest it" : null,
+        ondragstart: (e) => { e.stopPropagation(); dragStart(e, g.name, parent); } },
+        h("button", { class: "link twisty", title: collapsed ? "Expand" : "Collapse",
+          onclick: () => { collapsed ? S.collapsed.delete(lc(g.name)) : S.collapsed.add(lc(g.name)); render(); } }, collapsed ? "▸" : "▾"),
+        h("h3", {}, g.name, g.top ? h("span", { class: "badge", title: "Top group" }, " top") : null),
+        h("span", { class: "badge", title: `${nLogbooks} logbooks, ${nSub} subgroups` }, nSub ? `${nLogbooks} + ${nSub} sub` : nLogbooks),
+        arrows(up, down, i > 0, i < n - 1, "group"),
+        canDrag ? h("span", { class: "gact" },
+          h("button", { class: "link", onclick: () => renameGroup(g.name) }, "Rename"),
+          h("button", { class: "link", title: "Create a subgroup inside this group", onclick: () => newGroup(g.name) }, "+ Subgroup"),
+          h("button", { class: "link", title: "New logbook in this group", onclick: () => newLogbook({ group: g.name }) }, "+ Logbook"),
+          h("button", { class: "link", style: "color:var(--danger)", onclick: () => deleteGroup(g.name) }, "Delete")) : null),
+      collapsed ? null : h("div", { class: "items" },
+        g.members.map((m, j) => {
+          const sg = asGroup(groups, m);
+          if (!sg) return lbRow(m, g.name, j, g.members.length);
+          if (sub.includes(lc(sg.name))) return h("div", { class: "lb missing" }, h("span", { class: "name" }, m), h("span", { class: "comment" }, "group contains itself"));
+          return groupCard(sg, g.name, j, g.members.length, sub);
+        }),
+        !g.members.length ? h("div", { class: "muted", style: "padding:6px" }, canDrag ? "Empty: drag logbooks or groups here" : "Empty") : null));
+  };
 
-  const ungrouped = S.state.logbooks.filter((l) => !grouped.has(l.name.toLowerCase()));
+  const ungrouped = S.state.logbooks.filter((l) => !grouped.has(lc(l.name)));
   const dirty = S.groupsDraft && JSON.stringify(S.groupsDraft) !== JSON.stringify(S.state.groups);
 
   return h("div", {},
@@ -252,10 +307,12 @@ function viewLogbooks() {
       h("input", { type: "search", placeholder: "Filter by name, comment or user…", value: S.filter, style: "width:260px",
         oninput: (e) => { S.filter = e.target.value; const pos = e.target.selectionStart; render();
           const inp = $("#app input[type=search]"); inp.focus(); inp.setSelectionRange(pos, pos); } }),
+      h("button", { title: "Collapse or expand all groups", onclick: () => {
+        S.collapsed = S.collapsed.size ? new Set() : new Set(groups.map((g) => lc(g.name))); render(); } }, S.collapsed.size ? "Expand all" : "Collapse all"),
       isSuper() ? [
         S.selected.size ? h("button", { onclick: bulkEdit }, `Bulk edit (${S.selected.size})`) : null,
         S.selected.size ? h("button", { class: "link", onclick: () => { S.selected.clear(); render(); } }, "clear") : null,
-        h("button", { onclick: newGroup }, "New group"),
+        h("button", { onclick: () => newGroup(null) }, "New group"),
         h("button", { class: "primary", onclick: () => newLogbook({}) }, "New logbook"),
       ] : null),
     dirty ? h("div", { class: "pending" }, h("b", {}, "Unsaved group layout."),
@@ -263,16 +320,14 @@ function viewLogbooks() {
       h("button", { onclick: () => { S.groupsDraft = null; render(); } }, "Discard"),
       h("button", { class: "primary", onclick: saveGroups }, "Review & save")) : null,
     canDrag ? h("p", { class: "muted", style: "margin-top:0" },
-      "Drag logbooks between groups to move them (hold Ctrl to copy, logbooks may be in several groups). ",
-      "Drop on a logbook to place it before that one. Double-click to edit.") : null,
+      "Order here is the order on ELOG's start page. Use ↑ ↓ to reorder, or drag: drop on a logbook to place before it, ",
+      "on a group to move into it (Ctrl copies; a logbook may be in several groups). Drag a group by its title to nest it.") : null,
     h("div", { class: "board" },
-      groups.map(groupCard),
-      ungrouped.length || canDrag ? h("div", { class: "group ungrouped",
-        ondragover: (e) => { if (canDrag) e.preventDefault(); },
-        ondrop: (e) => dropOn(e, null, null) },
+      tops.map((g, i) => groupCard(g, null, i, tops.length, [])),
+      ungrouped.length || canDrag ? h("div", { class: "group ungrouped", ...dropZone((e) => dropOn(e, null, null)) },
         h("div", { class: "ghead" }, h("h3", {}, "Not in any group"), h("span", { class: "badge" }, ungrouped.length)),
-        h("div", { class: "items" }, ungrouped.map((l) => lbRow(l.name, null)),
-          !ungrouped.length ? h("div", { class: "muted", style: "padding:6px" }, "Drop here to remove from a group") : null)) : null));
+        h("div", { class: "items" }, ungrouped.map((l) => lbRow(l.name, null, 0, 0)),
+          canDrag ? h("div", { class: "muted", style: "padding:6px" }, "Drop a logbook here to remove it from its group, or a subgroup to make it top-level.") : null)) : null));
 }
 
 let DRAG = null;
@@ -291,35 +346,59 @@ function dropOn(e, toGroup, beforeName) {
 }
 function moveMember(name, from, to, before, copy) {
   const groups = clone(draftGroups());
-  if (to && name.toLowerCase() === to.toLowerCase()) return;
-  if (from && !copy && (from !== to || before)) {
+  if (to && asGroup(groups, name) && containsGroup(groups, name, to))
+    return toast(`'${to}' is inside '${name}'; a group cannot contain itself`, true);
+  if (before && lc(before) === lc(name)) return;
+  if (from && !copy) {
     const g = groupByName(groups, from);
-    g.members = g.members.filter((m) => m.toLowerCase() !== name.toLowerCase());
+    g.members = g.members.filter((m) => lc(m) !== lc(name));
   }
   if (to) {
     const g = groupByName(groups, to);
-    g.members = g.members.filter((m) => m.toLowerCase() !== name.toLowerCase());
-    const idx = before ? g.members.findIndex((m) => m.toLowerCase() === before.toLowerCase()) : -1;
+    g.members = g.members.filter((m) => lc(m) !== lc(name));
+    const idx = before ? g.members.findIndex((m) => lc(m) === lc(before)) : -1;
     if (idx >= 0) g.members.splice(idx, 0, name); else g.members.push(name);
   }
   S.groupsDraft = groups;
   render();
 }
-function moveGroup(i, d) {
+/** Swap a member (logbook or subgroup) with its neighbour inside a group. */
+function moveWithin(group, i, d) {
   const groups = clone(draftGroups());
-  const [g] = groups.splice(i, 1);
-  groups.splice(i + d, 0, g);
+  const m = groupByName(groups, group).members;
+  if (i + d < 0 || i + d >= m.length) return;
+  [m[i], m[i + d]] = [m[i + d], m[i]];
   S.groupsDraft = groups;
   render();
 }
-async function newGroup() {
-  const inp = h("input", { placeholder: "e.g. Raman Experiments" });
-  const ok = await modal("New group", h("label", {}, "Group name", inp), [{ label: "Add", validate: () => !!inp.value.trim() }]);
-  if (!ok) return;
+/** Swap a top-level group with the previous/next top-level group (their order in [global]). */
+function moveTop(name, d) {
   const groups = clone(draftGroups());
-  if (groupByName(groups, inp.value.trim())) return toast("Group exists", true);
-  groups.push({ name: inp.value.trim(), members: [], top: false });
+  const tops = topGroups(groups).map((g) => lc(g.name));
+  const t = tops.indexOf(lc(name));
+  if (t + d < 0 || t + d >= tops.length) return;
+  const a = groups.findIndex((g) => lc(g.name) === tops[t]);
+  const b = groups.findIndex((g) => lc(g.name) === tops[t + d]);
+  [groups[a], groups[b]] = [groups[b], groups[a]];
   S.groupsDraft = groups;
+  render();
+}
+async function newGroup(parent) {
+  const inp = h("input", { placeholder: parent ? "e.g. STM Experiments" : "e.g. Experiments" });
+  const ok = await modal(parent ? `New subgroup in '${parent}'` : "New group", h("label", {}, "Group name", inp),
+    [{ label: "Add", validate: () => !!inp.value.trim() }]);
+  if (!ok) return;
+  const name = inp.value.trim();
+  const groups = clone(draftGroups());
+  if (groupByName(groups, name) || lbByName(name)) return toast("A group or logbook with this name exists", true);
+  const g = { name, members: [], top: false };
+  if (parent) {
+    const p = groupByName(groups, parent);
+    p.members.push(name);
+    groups.splice(groups.indexOf(p) + 1, 0, g);  // keep the definition next to its parent in elogd.cfg
+  } else groups.push(g);
+  S.groupsDraft = groups;
+  S.collapsed && S.collapsed.delete(lc(parent || ""));
   render();
   toast("Group added. Drag logbooks into it, then save.");
 }
@@ -330,17 +409,23 @@ async function renameGroup(name) {
   const groups = clone(draftGroups());
   for (const g of groups) {
     if (g.name === name) g.name = inp.value.trim();
-    g.members = g.members.map((m) => (m.toLowerCase() === name.toLowerCase() ? inp.value.trim() : m));
+    g.members = g.members.map((m) => (lc(m) === lc(name) ? inp.value.trim() : m));
   }
   S.groupsDraft = groups;
   render();
 }
 async function deleteGroup(name) {
-  const ok = await modal(`Delete group '${name}'?`, h("p", {}, "The logbooks stay; only the grouping is removed."),
+  const g = groupByName(draftGroups(), name);
+  const subs = g.members.filter((m) => asGroup(draftGroups(), m));
+  const ok = await modal(`Delete group '${name}'?`, h("p", {}, "The logbooks stay; only the grouping is removed.",
+    subs.length ? ` Its subgroups (${subs.join(", ")}) move up into its place.` : ""),
     [{ label: "Delete group", class: "danger" }]);
   if (!ok) return;
-  let groups = clone(draftGroups()).filter((g) => g.name !== name);
-  for (const g of groups) g.members = g.members.filter((m) => m.toLowerCase() !== name.toLowerCase());
+  const groups = clone(draftGroups()).filter((x) => x.name !== name);
+  for (const p of groups) {
+    const i = p.members.findIndex((m) => lc(m) === lc(name));
+    if (i >= 0) p.members.splice(i, 1, ...subs.filter((s) => !p.members.some((m) => lc(m) === lc(s))));
+  }
   S.groupsDraft = groups;
   render();
 }

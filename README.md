@@ -10,7 +10,7 @@ accounts.
 
 | Page | Purpose |
 |------|---------|
-| **Logbooks** | Board of all groups. Drag logbooks between groups (Ctrl+drag copies, since a logbook can be in several groups), reorder them, and create, rename or delete groups. *New logbook* copies settings from a template, suggests the next name in a series (`np011`) and adds the logbook to its group. Tick logbooks to **bulk edit** a setting across all of them. |
+| **Logbooks** | Tree of groups and subgroups, in the same order as on ELOG's start page. Reorder logbooks inside a group and groups among their siblings with ↑ ↓ or by dragging. Drag logbooks between groups (Ctrl+drag copies, since a logbook can be in several groups). Drag a group by its title into another group to nest it, or onto *Not in any group* to make it top-level again. *+ Subgroup* creates a nested group. *New logbook* copies settings from a template, suggests the next name in a series (`np011`) and adds the logbook to its group. Tick logbooks to **bulk edit** a setting across all of them. |
 | **Logbook editor** | *Overview* (comment, titles, paging, list columns, quick filters, groups) · *Access* (login and admin users, with autocomplete from the password file) · *Attributes* (table: input type, options, required, locked, extendable, preset, comment; renaming an attribute updates every setting that refers to it) · *All settings* (key/value grid) · *Raw text*. |
 | **Users & access** | Pick a user to see every logbook they can open or administer, and toggle access with checkboxes. *Copy access from…* onboards a new person like an existing one. *Replace with…* fixes typos across all logbooks. Names in the config that do not match an account are listed separately. |
 | **Issues** | Linter: invalid option names (e.g. `extendable attributes`), groups that point to missing logbooks, users that do not exist, attributes referenced but not defined, malformed styles, duplicates. Many issues have a one-click fix. |
@@ -64,7 +64,38 @@ Run the tests with:
 python -m pytest -q tests
 ```
 
-## Install on the ELOG server
+## Run with Docker Compose
+
+Try the demo without installing Python:
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+To run it on the ELOG server next to an elogd that runs on the host:
+
+```bash
+cp .env.example .env                       # ELOG_UID/ELOG_GID = id -u elog / id -g elog, ELOG_DIR
+cp settings.example.json settings.json     # host paths, secret_key, manager_admins
+docker compose up -d --build
+```
+
+* The ELOG directory is mounted at the **same path** inside the container, so
+  `settings.json` uses the host paths. If `passwords.pwd` or the backup
+  directory live elsewhere, add volumes for them in `docker-compose.yml`.
+* The container runs as `ELOG_UID:ELOG_GID`, the account elogd runs as. It
+  needs write access to `elogd.cfg` and `backup_dir`. If the directory holding
+  `elogd.cfg` is not writable, the file is rewritten in place instead of being
+  replaced atomically; the backup is still taken first.
+* `pid: host` lets the manager see elogd and send it `SIGHUP`. Because the
+  container runs as a non-root user, it can only signal processes of that same
+  user. If elogd runs in the same compose project instead, use
+  `pid: "service:elogd"`.
+* The port is published on 127.0.0.1 only. Serve it through your HTTPS reverse
+  proxy (`deploy/nginx-location.conf`). With `"secure_cookies": true`, logging
+  in over plain `http://` does not work.
+
+## Install without Docker
 
 ```bash
 sudo mkdir -p /opt/elog-manager && sudo chown elog: /opt/elog-manager
@@ -119,4 +150,5 @@ elogmgr/store.py     atomic writes, conflict detection, backups, audit log
 elogmgr/app.py       Flask API and permissions
 elogmgr/static/      single-page UI (no build step)
 examples/            fictional sample elogd.cfg used by the demo and tests
+Dockerfile, docker-compose.yml, docker-compose.demo.yml
 ```

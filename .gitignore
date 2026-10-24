@@ -11,3 +11,5 @@ demo/backups/
 ref/
 CONFIG_REVIEW.md
 .claude/
+.env
+backups/

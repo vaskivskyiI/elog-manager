@@ -54,6 +54,25 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                                      f"Group '{g['name']}' references '{m}', which is neither a logbook nor a group",
                                      key=("Top group " if g["top"] else "Group ") + g["name"],
                                      fix={"op": "group_remove_member", "group": g["name"], "member": m}))
+    by_name = {g["name"].lower(): g for g in groups}
+
+    def reaches(start: str, target: str, seen: set) -> bool:
+        for m in by_name.get(start, {"members": []})["members"]:
+            ml = m.lower()
+            if ml in lb_lower:  # a logbook, even if a group has the same name
+                continue
+            if ml == target:
+                return True
+            if ml in by_name and ml not in lb_lower and ml not in seen:
+                seen.add(ml)
+                if reaches(ml, target, seen):
+                    return True
+        return False
+
+    for g in groups:
+        if reaches(g["name"].lower(), g["name"].lower(), set()):
+            issues.append(_issue("error", "global", f"Group '{g['name']}' contains itself (directly or via subgroups)",
+                                 key="Group " + g["name"]))
     if groups:
         for n in logbooks:
             if n.lower() not in grouped:

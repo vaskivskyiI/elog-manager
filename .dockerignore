@@ -1,0 +1,12 @@
+.git
+.claude
+**/__pycache__
+.pytest_cache
+ref
+demo
+examples
+tests
+deploy
+settings.json
+.env
+CONFIG_REVIEW.md

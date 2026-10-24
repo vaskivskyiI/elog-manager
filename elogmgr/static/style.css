@@ -64,6 +64,16 @@ button:disabled { opacity: .5; cursor: default; }
 .group > .ghead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .group > .ghead h3 { margin: 0; flex: 1; }
 .group.ungrouped { border-style: dashed; }
+.group.nested { margin: 6px 0 6px 6px; border-left: 3px solid var(--accent-soft); border-radius: 6px; }
+.group.nested > .ghead { padding: 6px 8px; border-bottom-style: dashed; }
+.group.nested > .ghead h3 { font-size: 14px; }
+.ghead[draggable=true] { cursor: grab; }
+.ghead .twisty { width: 14px; color: var(--muted); }
+.ghead .gact { display: flex; gap: 8px; flex-wrap: wrap; }
+.mv { display: inline-flex; gap: 2px; visibility: hidden; }
+.mv button { width: 16px; }
+.lb:hover > .mv, .ghead:hover > .mv, .mv:focus-within { visibility: visible; }
+@media (hover: none) { .mv { visibility: visible; } }
 .group .items { padding: 6px; min-height: 36px; }
 .lb { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: grab; }
 .lb:hover { background: var(--info-soft); }

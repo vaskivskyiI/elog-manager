@@ -140,6 +140,33 @@ def test_reload_button_and_failures(client):
     assert reload_elogd({"reload_mode": "signal", "elogd_process": "no-such-elogd-xyz"})["ok"] is False
 
 
+def test_nested_groups_lint():
+    c = ElogConfig(ref_text())
+    msgs = [i["message"] for i in lint(c)]
+    # "Group Playground = Playground" names the logbook, not the group itself
+    assert not any("contains itself" in m for m in msgs)
+    groups = c.groups()
+    for g in groups:
+        if g["name"] == "STM Experiments":
+            g["members"].append("Experiments")  # Experiments -> STM Experiments -> Experiments
+    c.set_groups(groups)
+    msgs = [i["message"] for i in lint(c)]
+    assert any("'Experiments' contains itself" in m for m in msgs)
+
+
+def test_write_falls_back_to_in_place(client, monkeypatch):
+    import tempfile
+    def no_tmp(*a, **kw):
+        raise PermissionError("directory not writable")
+    monkeypatch.setattr(tempfile, "mkstemp", no_tmp)
+    login(client, "alice")
+    st = client.get("/api/state").json
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": [
+        {"op": "set", "section": "r001", "key": "Comment", "value": "written in place"}]}, headers=H)
+    assert r.status_code == 200, r.json
+    assert "comment = written in place" in (client.tmp / "elogd.cfg").read_text(encoding="utf-8")
+
+
 def test_rename_keeps_data_dir(client):
     login(client, "alice")
     st = client.get("/api/state").json
