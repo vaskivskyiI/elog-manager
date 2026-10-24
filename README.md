@@ -147,7 +147,7 @@ running across reboots.
   user. If elogd runs in the same compose project instead, use
   `pid: "service:elogd"`.
 * The port is published on 127.0.0.1 only. Serve it through your HTTPS reverse
-  proxy (`deploy/nginx-location.conf`). Over plain `http://`, sign-in does not
+  proxy (see *Reverse proxy* below). Over plain `http://`, sign-in does not
   work unless `ELOGMGR_BEHIND_PROXY=0`.
 
 ## Install without Docker
@@ -162,10 +162,29 @@ sudo cp deploy/elog-manager.service /etc/systemd/system/
 sudo systemctl enable --now elog-manager
 ```
 
-Add `deploy/nginx-location.conf` to the HTTPS server block that already proxies
-ELOG, so the manager is served at `https://elog.example.org/manager/`. The
-service runs as the same user as elogd (`Usr = elog`), so it can write
+The service runs as the same user as elogd (`Usr = elog`), so it can write
 `elogd.cfg` and read `passwords.pwd`; only installing it needs sudo.
+
+## Reverse proxy
+
+`deploy/nginx.conf` is a complete nginx site: HTTPS with Let's Encrypt
+certificates, ELOG at `https://elog.example.org/` and the manager at
+`https://elog.example.org/manage/`.
+
+```bash
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/elog   # then edit the host name
+sudo ln -s /etc/nginx/sites-available/elog /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+* The manager uses only relative URLs, so any subfolder works. Keep the
+  trailing slashes in `location /manage/` and `proxy_pass http://127.0.0.1:8090/;`
+  so the prefix is stripped. nginx then redirects `/manage` to `/manage/`.
+* Avoid a logbook called `manage`; its ELOG URL would be routed to the manager.
+* In `elogd.cfg`, set `URL = https://elog.example.org/` so ELOG builds correct
+  links, and `Interface = 127.0.0.1` so elogd is only reachable through nginx.
+* For the manager, the config adds a strict Content-Security-Policy and clears
+  any `X-Remote-User` header sent by clients.
 
 **Applying changes.** elogd does not watch `elogd.cfg`. It re-reads the file
 on `SIGHUP` (`killall -HUP elogd`). After every save, the manager sends that
