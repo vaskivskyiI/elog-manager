@@ -61,6 +61,10 @@ for m in re.finditer(r"<code>([^<]+=[^<]*)</code>", src):
     options.append({"name": name, "spec": spec, "section": title, "doc": f"{DOC}#{anchor}", "default": None})
 
 out = os.path.join(ROOT, "elogmgr", "options.json")
-with open(out, "w", encoding="utf-8") as f:
+# keep the options of the companion ELOG fork, which ELOG's reference does not document
+if os.path.exists(out):
+    with open(out, encoding="utf-8") as f:
+        options += [o for o in json.load(f) if o.get("source") == "fork"]
+with open(out, "w", encoding="utf-8", newline="\n") as f:
     json.dump(options, f, indent=1, ensure_ascii=False)
 print(f"{len(options)} options -> {out}")

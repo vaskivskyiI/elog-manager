@@ -276,7 +276,7 @@ ATTR_PREFIXES = [
     "Preset on first reply", "Preset on reply", "Preset on edit", "Preset on duplicate", "Preset",
     "Subst on reply", "Subst on edit", "Subst on duplicate", "Subst",
     "Options", "MOptions", "ROptions", "IOptions", "Comment", "Tooltip", "Type", "Format",
-    "Style", "Icon comment",
+    "Style", "Icon comment", "Change note", "Empty option",
 ]
 BUILTIN_ATTRS = {"id", "date", "subtext", "text", "edit", "delete", "attachments", "entry time",
                  "author", "message id", "logbook", "date of", "entry date", "#"}

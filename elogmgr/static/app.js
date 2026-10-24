@@ -597,10 +597,11 @@ async function bulkEdit() {
 // ============================================================ LOGBOOK EDITOR
 const ATTR_PREFIXES = ["Preset on first reply", "Preset on reply", "Preset on edit", "Preset on duplicate", "Preset",
   "Subst on reply", "Subst on edit", "Subst on duplicate", "Subst", "Options", "MOptions", "ROptions", "IOptions",
-  "Comment", "Tooltip", "Type", "Format", "Style", "Icon comment"];
+  "Comment", "Tooltip", "Type", "Format", "Style", "Icon comment", "Change note", "Empty option"];
 const ATTR_LIST_KEYS = ["Required Attributes", "Locked Attributes", "Extendable options", "Fixed Attributes Reply",
   "Fixed Attributes Edit", "Propagate Attributes", "Quick filter", "List display", "Show Attributes",
   "Show Attributes Edit", "Show attributes reply", "Hidden attributes", "Sort Attributes"];
+const TPL = "Text template ";
 const OPT_KINDS = ["Options", "MOptions", "ROptions", "IOptions"];
 const TYPES = ["", "numeric", "date", "datetime", "userlist", "muserlist", "useremail", "museremail"];
 const BUILTIN = ["ID", "Date", "Subtext", "Text", "Attachments", "Edit", "Delete"];
@@ -704,6 +705,43 @@ class Editor {
     }
     return ops;
   }
+  /** Text templates in menu order: {own, list: [{name, content, from: "here" | "global" | null}]}. Without its own
+   *  "Text templates" a logbook offers the [global] list; elogd also looks up each "Text template <name>" there. */
+  templates() {
+    const own = this.get("Text templates") !== undefined;
+    const names = own ? this.list("Text templates") : splitList(globalVal("Text templates"));
+    return { own, list: names.map((name) => {
+      const v = this.get(TPL + name), g = globalVal(TPL + name);
+      return { name, content: v !== undefined ? v : g || "", from: v !== undefined ? "here" : g !== undefined ? "global" : null };
+    }) };
+  }
+  /** "Text template <name>" settings whose name is not in the list (elogd ignores them). */
+  unlistedTemplates() {
+    const listed = new Set(this.templates().list.map((t) => norm(t.name)));
+    return this.items.map(([k, v]) => [splitCond(k)[0], k.trim().split(/\s+/).join(" "), v])
+      .filter(([cond, k]) => !cond && norm(k).startsWith(norm(TPL) + " ") && !listed.has(norm(k.slice(TPL.length))))
+      .map(([, k, v]) => ({ name: k.slice(TPL.length), content: v }));
+  }
+  templateNames() { return this.templates().list.map((t) => t.name); }
+  addTemplate(name, content) {
+    this.setList("Text templates", [...this.templateNames().filter((n) => norm(n) !== norm(name)), name]);
+    if (content) this.set(TPL + name, content);
+  }
+  setTemplate(name, content) { this.set(TPL + name, content); }
+  renameTemplate(oldN, newN) {
+    this.setList("Text templates", this.templateNames().map((n) => (norm(n) === norm(oldN) ? newN : n)));
+    const i = this.items.findIndex(([k]) => norm(k) === norm(TPL + oldN));
+    if (i >= 0) this.items[i][0] = TPL + newN;
+  }
+  removeTemplate(name) {
+    this.setList("Text templates", this.templateNames().filter((n) => norm(n) !== norm(name)));
+    this.set(TPL + name, null);
+  }
+  moveTemplate(i, d) {
+    const l = this.templateNames();
+    [l[i], l[i + d]] = [l[i + d], l[i]];
+    this.setList("Text templates", l);
+  }
   groupsChanged() { return JSON.stringify([...this.groups].sort()) !== JSON.stringify([...this.origGroups].sort()); }
   dirty() { return this.ops().length > 0 || this.groupsChanged(); }
 }
@@ -717,7 +755,7 @@ function viewLogbook(r) {
   const E = S.editor;
   const tab = r.tab || "overview";
   const rerender = () => render();
-  const tabs = [["overview", "Overview"], ["access", "Access"], ["attributes", "Attributes"], ["all", "All settings"], ["raw", "Raw text"]];
+  const tabs = [["overview", "Overview"], ["access", "Access"], ["attributes", "Attributes"], ["templates", "Templates"], ["all", "All settings"], ["raw", "Raw text"]];
   const issues = S.state.issues.filter((i) => i.section.toLowerCase() === lb.name.toLowerCase());
   const elogUrl = S.state.elog_url ? S.state.elog_url.replace(/\/$/, "") + "/" + encodeURIComponent(lb.name) + "/" : null;
 
@@ -731,6 +769,7 @@ function viewLogbook(r) {
   if (tab === "overview") content = tabOverview(E, rerender);
   else if (tab === "access") content = tabAccess(E, rerender);
   else if (tab === "attributes") content = tabAttributes(E, rerender);
+  else if (tab === "templates") content = tabTemplates(E, rerender);
   else if (tab === "all") content = kvTable(E, rerender, globalVal);
   else content = tabRaw(lb);
 
@@ -771,7 +810,8 @@ function optField(E, key, rerender, opts = {}) {
       values.map(([val, label]) => h("option", { value: val, selected: v !== undefined && v.toLowerCase() === val.toLowerCase() }, label)));
   } else {
     input = h(opts.textarea ? "textarea" : "input", { value: v || "", disabled: opts.disabled, placeholder: ph,
-      type: o.type === "number" ? "number" : null, step: o.type === "number" ? "any" : null,
+      type: o.type === "number" ? "number" : null, step: o.type === "number" ? (o.integer ? "1" : "any") : null,
+      min: o.integer ? "0" : null,
       onchange: (e) => set(e.target.value.trim()) });
   }
   const hint = opts.hint || o.desc;
@@ -868,6 +908,79 @@ function tabAttributes(E, rerender) {
     h("p", { class: "hint" }, "Renaming updates every setting that refers to the attribute, including $name in titles. ",
       "Conditional settings like {1} Subst SN are kept and can be edited under All settings. ",
       "Extendable lets users add new option values when writing an entry."));
+}
+
+/** A template name must fit in "Text templates = A, B" and in the key "Text template <name>". */
+function templateNameProblem(name, names, except) {
+  if (!name) return "Enter a name";
+  if (/[,=#;[\]{}]/.test(name)) return "A template name cannot contain , = # ; [ ] { }";
+  if (name.length > 100) return "Name too long";
+  if (names.some((n) => norm(n) === norm(name) && norm(n) !== norm(except || ""))) return `There is already a template '${name}'`;
+  return null;
+}
+const oneLine = (s) => s.replace(/\s*[\r\n]+\s*/g, " ").trim();  // elogd.cfg values are single lines
+/** elogd reads the value as a file name unless it contains "<" (inline HTML) or "..". */
+const templateKind = (c) => (!c ? "empty" : /<|\.\./.test(c) ? "inline HTML" : "file in the logbook directory");
+const TPL_MAX = 9999;  // elogd reads at most this many characters of a template setting
+
+function tabTemplates(E, rerender) {
+  const { own, list } = E.templates();
+  const names = list.map((t) => t.name);
+  const htmlEditor = E.get("HTML editor") || globalVal("HTML editor") || "TinyMCE";
+  const contentBox = (value, onchange, disabled) => h("textarea", { rows: 3, style: "width:100%", value, disabled, onchange,
+    placeholder: "<h3>Cooldown {{date}}</h3><p>Operator: {{author}}</p>   or a file name: templates/cooldown.html" });
+  const kindHint = (c) => h("span", { class: "hint", style: c.length > TPL_MAX ? "color:var(--danger)" : null },
+    templateKind(c), c.length > TPL_MAX ? ` · ${c.length} characters, elogd reads only ${TPL_MAX}` : "");
+  const row = (t, i) => h("tr", { class: getItem(E.orig, TPL + t.name) !== (t.from === "here" ? t.content : undefined) ? "changed" : "" },
+    h("td", { style: "width:22%" }, own
+      ? h("input", { value: t.name, onchange: (e) => {
+        const n = e.target.value.trim().split(/\s+/).join(" ");
+        if (n === t.name) return;
+        const p = templateNameProblem(n, names, t.name);
+        if (p) { toast(p, true); return rerender(); }
+        E.renameTemplate(t.name, n); rerender(); } })
+      : t.name),
+    h("td", {},
+      contentBox(t.content, (e) => { E.setTemplate(t.name, oneLine(e.target.value)); rerender(); }, !own),
+      h("div", {}, t.from === "global" ? h("span", { class: "hint" }, "from [global] · ") : null,
+        t.from === null ? h("span", { class: "hint", style: "color:var(--warn)" }, `no 'Text template ${t.name}' set: ELOG skips it`)
+          : kindHint(t.content))),
+    h("td", { style: "white-space:nowrap;width:1%" }, own ? [
+      h("button", { class: "link", disabled: i === 0, title: "Move up", onclick: () => { E.moveTemplate(i, -1); rerender(); } }, "↑"), " ",
+      h("button", { class: "link", disabled: i === list.length - 1, title: "Move down", onclick: () => { E.moveTemplate(i, 1); rerender(); } }, "↓"), " ",
+      h("button", { class: "link", style: "color:var(--danger)", onclick: () => { E.removeTemplate(t.name); rerender(); } }, "Remove")] : null));
+  const unlisted = E.unlistedTemplates();
+  const nameInp = h("input", { placeholder: "Name, e.g. Cooldown", style: "width:100%" });
+  const contentInp = contentBox("", null);
+  return h("div", { class: "card" },
+    !own && list.length ? h("p", { class: "issue info", style: "margin-top:0" }, "This logbook offers the templates of [global]. ",
+      "Adding a template gives it its own list, starting with these.") : null,
+    list.length ? h("table", {},
+      h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Content: inline HTML or file name"), h("th", {}))),
+      h("tbody", {}, list.map(row)))
+      : h("p", { class: "muted", style: "margin-top:0" }, "No text templates yet."),
+    unlisted.length ? h("div", { style: "margin-top:12px" },
+      h("b", {}, "Not in the menu ", h("span", { class: "hint" }, "set, but not listed in Text templates, so ELOG ignores them")),
+      h("table", {}, h("tbody", {}, unlisted.map((t) => h("tr", {}, h("td", { style: "width:22%" }, t.name), h("td", { class: "muted" }, t.content),
+        h("td", { style: "white-space:nowrap;width:1%" },
+          h("button", { class: "link", onclick: () => { E.addTemplate(t.name); rerender(); } }, "Add to menu"), " ",
+          h("button", { class: "link", style: "color:var(--danger)", onclick: () => { E.setTemplate(t.name, null); rerender(); } }, "Remove"))))))) : null,
+    h("h3", { style: "margin:16px 0 6px" }, "New template"),
+    h("div", { class: "row", style: "align-items:flex-start;flex-wrap:nowrap" },
+      h("div", { style: "width:22%;flex-shrink:0" }, nameInp),
+      h("div", { style: "flex:1" }, contentInp),
+      h("button", { onclick: () => {
+        const n = nameInp.value.trim().split(/\s+/).join(" "), c = oneLine(contentInp.value);
+        const p = templateNameProblem(n, names) || (c ? null : "Enter the template's HTML or a file name");
+        if (p) return toast(p, true);
+        E.addTemplate(n, c); rerender(); } }, "Add template")),
+    htmlEditor.toLowerCase() !== "tinymce" ? h("p", { class: "issue warning", style: "margin-top:12px" },
+      `HTML editor is '${htmlEditor}': ELOG offers templates only in the TinyMCE editor.`) : null,
+    h("p", { class: "hint" }, "Templates appear in the Templates menu of ELOG's HTML editor (TinyMCE) and insert their content into the entry. ",
+      "Content is inline HTML (anything containing <) or the name of a file in the logbook directory, e.g. templates/cooldown.html. ",
+      "Line breaks are joined, because a setting in elogd.cfg is one line. Placeholders filled in on insert: ",
+      ["{{date}}", "{{time}}", "{{isodate}}", "{{author}}", "{{logbook}}"].map((x, i) => [i ? ", " : "", h("code", {}, x)]), ". ",
+      "Changes are saved with Review & save, like every other setting."));
 }
 
 function kvTable(E, rerender, inherit) {

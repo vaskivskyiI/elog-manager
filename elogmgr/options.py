@@ -2,9 +2,12 @@
 
 options.json holds the facts extracted from ELOG's reference
 (tools/build_options.py): name, value syntax, default, section, doc link.
-This module adds a value type, our own one-line descriptions for the
-common options, and lookups that understand pattern options such as
-"Options <attribute>" and conditional keys such as "{1} Subst SN".
+Options added by the companion ELOG fork are appended to options.json
+with "source": "fork" and carry their own scope and description; a
+rebuild keeps them. This module adds a value type, our own one-line
+descriptions for the common options, and lookups that understand pattern
+options such as "Options <attribute>" and conditional keys such as
+"{1} Subst SN".
 """
 from __future__ import annotations
 
@@ -127,7 +130,8 @@ def official() -> list[dict]:
     out, seen = [], {}
     for o in raw:
         key = norm(o["name"])
-        scope = "global" if o["section"] in GLOBAL_ONLY_SECTIONS or key in GLOBAL_ONLY_NAMES else "any"
+        scope = o.get("scope") or ("global" if o["section"] in GLOBAL_ONLY_SECTIONS or key in GLOBAL_ONLY_NAMES
+                                   else "any")
         if key in seen:  # documented twice (e.g. Page title: start page and entry page) -> valid in both
             if scope == "any":
                 seen[key]["scope"] = "any"
@@ -140,7 +144,7 @@ def official() -> list[dict]:
             "values": values,
             "scope": scope,
             "pattern": "<" in o["name"],
-            "desc": DESCRIPTIONS.get(key, ""),
+            "desc": o.get("desc") or DESCRIPTIONS.get(key, ""),
         })
         seen[key] = out[-1]
     return out
@@ -250,6 +254,8 @@ def check_value(opt: dict, value: str) -> str | None:
     if opt["type"] == "bool" and v not in ("0", "1"):
         return f"must be 0 or 1, not '{v}'"
     if opt["type"] == "number":
+        if opt.get("integer"):
+            return None if re.fullmatch(r"\d+", v) else f"must be a whole number, not '{v}'"
         try:
             float(v)
         except ValueError:

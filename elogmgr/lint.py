@@ -156,6 +156,7 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                 if prefix.endswith("Options"):
                     option_tags.update(re.findall(r"\{([^}]*)\}", v))
 
+        issues += named_list_issues(cfg, s, is_global)
         unused = sorted(t for t in option_tags if t and t not in cond_used)
         if unused:
             issues.append(_issue("info", s.name, "Option tags {" + ",".join(unused) + "} are set but no "
@@ -167,6 +168,36 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
             if problem:
                 issues.append(_issue("error", s.name, problem,
                                      fix={"op": "ensure_author", "section": s.name}))
+    return issues
+
+
+# "Text templates = A, B" names entries defined as "Text template A = ..." (same for custom pages)
+NAMED_LISTS = {"Text templates": "Text template", "Custom pages": "Custom page"}
+
+
+def named_list_issues(cfg: ElogConfig, sec, is_global: bool) -> list[dict]:
+    """Logbook checks only: [global] lists and entries may be completed or used by the logbooks."""
+    issues = []
+    if is_global:
+        return issues
+    for list_key, prefix in NAMED_LISTS.items():
+        for n in sec.get_list(list_key):
+            key = f"{prefix} {n}"
+            if sec.get(key) is None and cfg.global_.get(key) is None:
+                issues.append(_issue("warning", sec.name, f"'{list_key}' lists '{n}', but '{key}' is not set",
+                                     key=list_key))
+        own = sec.get(list_key) is not None  # elogd falls back to [global] for the list
+        listed = {norm(n) for n in (sec if own else cfg.global_).get_list(list_key)}
+        p = norm(prefix) + " "
+        for k, _ in sec.items():
+            cond, bare = strip_condition(k)
+            nk = norm(bare)
+            if cond or not nk.startswith(p) or nk.startswith("custom page title "):
+                continue
+            name = " ".join(bare.split())[len(prefix) + 1:]
+            if norm(name) not in listed:
+                issues.append(_issue("info", sec.name, f"'{k}' is not offered because '{name}' is not in "
+                                                       f"'{list_key}'", key=k))
     return issues
 
 

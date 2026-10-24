@@ -1468,5 +1468,197 @@
   "section": "EMail notification",
   "doc": "https://elog.psi.ch/elog/config.html#email-notification",
   "default": null
+ },
+ {
+  "name": "Modern selection page",
+  "spec": "0|1",
+  "section": "Fork options",
+  "doc": null,
+  "default": "0",
+  "scope": "global",
+  "desc": "New start page (?classic=1 shows the old one)",
+  "source": "fork"
+ },
+ {
+  "name": "Manager URL",
+  "spec": "<URL>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "global",
+  "desc": "Shows a Manager button on the start page linking here",
+  "source": "fork"
+ },
+ {
+  "name": "Manager title",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": "Manager",
+  "scope": "global",
+  "desc": "Text of the Manager button",
+  "source": "fork"
+ },
+ {
+  "name": "HTML editor",
+  "spec": "TinyMCE|CKEditor|none",
+  "section": "Fork options",
+  "doc": null,
+  "default": "TinyMCE",
+  "scope": "any",
+  "desc": "Editor for HTML-encoded entries",
+  "source": "fork"
+ },
+ {
+  "name": "Summary length",
+  "spec": "<number>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Summary cut after N characters (instead of lines)",
+  "source": "fork",
+  "integer": true
+ },
+ {
+  "name": "Show admin",
+  "spec": "0|1",
+  "section": "Fork options",
+  "doc": null,
+  "default": "0",
+  "scope": "any",
+  "desc": "List the logbook's admin users on the start page",
+  "source": "fork"
+ },
+ {
+  "name": "Live updates",
+  "spec": "0|1",
+  "section": "Fork options",
+  "doc": null,
+  "default": "1",
+  "scope": "any",
+  "desc": "List pages update in place instead of needing Refresh",
+  "source": "fork"
+ },
+ {
+  "name": "Resize images",
+  "spec": "<number>",
+  "section": "Fork options",
+  "doc": null,
+  "default": "0",
+  "scope": "any",
+  "desc": "Scale JPEG photos larger than N pixels down before upload (0 = off)",
+  "source": "fork",
+  "integer": true
+ },
+ {
+  "name": "Text templates",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Templates offered in the editor's Templates menu",
+  "source": "fork"
+ },
+ {
+  "name": "Text template <name>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Template content: file in the logbook directory, or inline HTML",
+  "source": "fork"
+ },
+ {
+  "name": "Custom pages",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Extra pages of the logbook, shown as buttons",
+  "source": "fork"
+ },
+ {
+  "name": "Custom page title <name>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Button text of a custom page",
+  "source": "fork"
+ },
+ {
+  "name": "Custom page <name>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Inline JSON definition, or a .json/.html file in the logbook directory",
+  "source": "fork"
+ },
+ {
+  "name": "Quick entries",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "One-click entries offered on the list page",
+  "source": "fork"
+ },
+ {
+  "name": "Quick entry title",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": "Quick entry",
+  "scope": "any",
+  "desc": "Label of the quick entry menu",
+  "source": "fork"
+ },
+ {
+  "name": "Quick entry attributes",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Attr=Value presets for all quick entries",
+  "source": "fork"
+ },
+ {
+  "name": "Quick entry <name>",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Attr=Value presets for this quick entry; Subject defaults to the name",
+  "source": "fork"
+ },
+ {
+  "name": "Change note <attribute>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Text added to the entry when the attribute is changed; $old and $new",
+  "source": "fork"
+ },
+ {
+  "name": "Empty option <attribute>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Label of the empty choice of the attribute's drop-down",
+  "source": "fork"
  }
 ]

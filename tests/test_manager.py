@@ -198,33 +198,33 @@ def test_custom_options(client):
     login(client, "alice")
     st = client.get("/api/state").json
     r = client.post("/api/apply", json={"etag": st["etag"], "ops": [
-        {"op": "set", "section": "STM", "key": "Show admin", "value": "0"}]}, headers=H)
+        {"op": "set", "section": "STM", "key": "Show banner", "value": "0"}]}, headers=H)
     assert r.status_code == 200
-    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show admin"]
+    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show banner"]
     # only managers may register; official names are refused
     login(client, "bob")
-    assert client.post("/api/custom_options", json={"option": {"name": "Show admin"}}, headers=H).status_code == 403
+    assert client.post("/api/custom_options", json={"option": {"name": "Show banner"}}, headers=H).status_code == 403
     login(client, "alice")
     assert client.post("/api/custom_options", json={"option": {"name": "Reverse sort"}}, headers=H).status_code == 400
     assert client.post("/api/custom_options", json={"option": {"name": "X", "type": "enum", "values": ["a"]}},
                        headers=H).status_code == 400
-    r = client.post("/api/custom_options", json={"option": {"name": "Show admin", "type": "bool", "default": "1",
-                                                            "desc": "Show the admin link"}}, headers=H)
+    r = client.post("/api/custom_options", json={"option": {"name": "Show banner", "type": "bool", "default": "1",
+                                                            "desc": "Show a banner"}}, headers=H)
     assert r.status_code == 200, r.json
     st = client.get("/api/state").json
     assert unknown(st) == []
-    opt = next(o for o in client.get("/api/options").json["options"] if o["name"] == "Show admin")
+    opt = next(o for o in client.get("/api/options").json["options"] if o["name"] == "Show banner")
     assert opt["custom"] and opt["type"] == "bool" and opt["default"] == "1"
     assert (client.tmp / "state" / "custom_options.json").exists()
     # values are now checked like official options
-    bad = [{"op": "set", "section": "STM", "key": "Show admin", "value": "yes"}]
+    bad = [{"op": "set", "section": "STM", "key": "Show banner", "value": "yes"}]
     assert client.post("/api/apply", json={"etag": st["etag"], "ops": bad}, headers=H).status_code == 400
     # pattern options work too
     client.post("/api/custom_options", json={"option": {"name": "Unit <attribute>"}}, headers=H)
     from elogmgr.options import lookup
     assert lookup("Unit Power")["name"] == "Unit <attribute>"
-    assert client.post("/api/custom_options", json={"op": "delete", "name": "Show admin"}, headers=H).status_code == 200
-    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show admin"]
+    assert client.post("/api/custom_options", json={"op": "delete", "name": "Show banner"}, headers=H).status_code == 200
+    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show banner"]
 
 
 def test_config_check_blocks_new_errors(client):
@@ -440,3 +440,111 @@ def test_rename_keeps_data_dir(client):
     c = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8"))
     assert c.section("Raman 001").get("Subdir") == "r001"
     assert c.groups_of("Raman 001") == ["Raman"]
+
+
+FORK_OPTIONS = {  # option -> (scope, type) of the options added by the companion ELOG fork
+    "Modern selection page": ("global", "bool"), "Manager URL": ("global", "string"),
+    "Manager title": ("global", "string"), "HTML editor": ("any", "enum"), "Summary length": ("any", "number"),
+    "Show admin": ("any", "bool"), "Live updates": ("any", "bool"), "Resize images": ("any", "number"),
+    "Text templates": ("any", "list"), "Text template Cooldown": ("any", "string"),
+    "Custom pages": ("any", "list"), "Custom page Status": ("any", "string"),
+    "Custom page title Status": ("any", "string"), "Quick entries": ("any", "list"),
+    "Quick entry title": ("any", "string"), "Quick entry attributes": ("any", "list"),
+    "Quick entry Bakeout": ("any", "list"), "Change note Position": ("any", "string"),
+    "Empty option Position": ("any", "string"),
+}
+
+
+def test_fork_options_in_catalog():
+    from elogmgr.elogcfg import attribute_key_target
+    from elogmgr.options import check_value, lookup
+    for key, (scope, typ) in FORK_OPTIONS.items():
+        o = lookup(key)
+        assert o and (o["scope"], o["type"]) == (scope, typ) and o["desc"], key
+    # the most specific pattern wins, exact names before patterns
+    assert lookup("Custom page title Status")["name"] == "Custom page title <name>"
+    assert lookup("Custom page Status")["name"] == "Custom page <name>"
+    assert lookup("Quick entry title")["name"] == "Quick entry title"
+    assert lookup("Text template Tip exchange")["name"] == "Text template <name>"
+    assert lookup("HTML editor")["default"] == "TinyMCE" and lookup("Live updates")["default"] == "1"
+    assert check_value(lookup("HTML editor"), "Quill") and not check_value(lookup("HTML editor"), "ckeditor")
+    assert check_value(lookup("Resize images"), "1.5") and check_value(lookup("Summary length"), "long")
+    assert not check_value(lookup("Resize images"), "1600")
+    assert check_value(lookup("Modern selection page"), "yes") and not check_value(lookup("Live updates"), "0")
+    assert attribute_key_target("Change note Position") == ("Change note", "Position")
+    assert attribute_key_target("Empty option Position") == ("Empty option", "Position")
+
+
+def test_fork_options_lint():
+    c = ElogConfig(ref_text())
+    c.global_.set("Modern selection page", "1")
+    c.global_.set("Manager URL", "/manage/")
+    s = c.section("STM")
+    for key in FORK_OPTIONS:
+        if key not in ("Modern selection page", "Manager URL", "Manager title", "Text templates", "Text template Cooldown"):
+            s.set(key, {"bool": "1", "number": "200", "enum": "CKEditor"}.get(FORK_OPTIONS[key][1], "x"))
+    s.set("Custom pages", "Status")
+    s.set("Change note Position", "Moved from $old to $new")
+    s.set("Manager title", "Manager")
+    issues = [i for i in lint(c) if i["section"] in ("STM", "global")]
+    msgs = [i["message"] for i in issues]
+    assert not any("not in ELOG's option reference" in m for m in msgs), msgs
+    assert not any(i["level"] == "error" and i["section"] == "STM" for i in issues), msgs
+    assert any("'Manager title' only has an effect in [global]" in m for m in msgs)
+    s.set("Resize images", "big")
+    s.set("Change note Nope", "x")
+    msgs = [i["message"] for i in lint(c) if i["section"] == "STM"]
+    assert "'Resize images' must be a whole number, not 'big'" in msgs
+    assert any("'Change note Nope' refers to 'Nope'" in m for m in msgs)
+
+
+def test_text_template_lint():
+    c = ElogConfig(ref_text())
+    s = c.section("STM")
+    s.set("Text templates", "Tip exchange, Cooldown")
+    s.set("Text template Tip exchange", "<h3>{{date}}</h3>")
+    s.set("Text template Old", "old.html")
+    msgs = [i["message"] for i in lint(c) if i["section"] == "STM"]
+    assert "'Text templates' lists 'Cooldown', but 'Text template Cooldown' is not set" in msgs
+    assert "'Text template Old' is not offered because 'Old' is not in 'Text templates'" in msgs
+    assert not any("Tip exchange" in m for m in msgs)
+    # elogd looks up the list and each template in [global] when the logbook has none
+    c.global_.set("Text template Cooldown", "cooldown.html")
+    s.delete("Text templates")
+    c.global_.set("Text templates", "Tip exchange, Cooldown, Old")
+    assert not any("template" in i["message"] for i in lint(c) if i["section"] in ("STM", "global"))
+
+
+def test_template_editor_writes(client):
+    """The ops the Templates tab sends: add, edit, rename, delete, all through preview + config check."""
+    login(client, "bob")  # a logbook admin of STM
+    st = client.get("/api/state").json
+    add = [{"op": "set", "section": "STM", "key": "Text templates", "value": "Tip exchange, Cooldown"},
+           {"op": "set", "section": "STM", "key": "Text template Tip exchange",
+            "value": "<h3>Tip exchange {{date}}</h3><p>Operator: {{author}}</p>"},
+           {"op": "set", "section": "STM", "key": "Text template Cooldown", "value": "templates/cooldown.html",
+            "after": "Text template Tip exchange"}]
+    dry = client.post("/api/apply", json={"etag": st["etag"], "ops": add, "dry_run": True}, headers=H).json
+    assert "+Text template Cooldown = templates/cooldown.html" in dry["diff"]
+    assert not dry["blocking"] and not dry["new_issues"], dry["new_issues"]
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": add}, headers=H)
+    assert r.status_code == 200, r.json
+    lines = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8")).section("STM").text().splitlines()
+    i = lines.index("Text templates = Tip exchange, Cooldown")
+    assert lines[i + 1:i + 3] == ["Text template Tip exchange = <h3>Tip exchange {{date}}</h3><p>Operator: {{author}}</p>",
+                                  "Text template Cooldown = templates/cooldown.html"]
+    # rename Cooldown -> Cooldown 4K, edit (line breaks become spaces), delete Tip exchange
+    edit = [{"op": "delete_key", "section": "STM", "key": "Text template Cooldown"},
+            {"op": "delete_key", "section": "STM", "key": "Text template Tip exchange"},
+            {"op": "set", "section": "STM", "key": "Text templates", "value": "Cooldown 4K"},
+            {"op": "set", "section": "STM", "key": "Text template Cooldown 4K", "value": "<p>4K\n{{isodate}}</p>",
+             "after": "Text templates"}]
+    r = client.post("/api/apply", json={"etag": r.json["etag"], "ops": edit}, headers=H)
+    assert r.status_code == 200, r.json
+    s = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8")).section("STM")
+    assert s.get("Text templates") == "Cooldown 4K" and s.get("Text template Cooldown 4K") == "<p>4K {{isodate}}</p>"
+    assert s.get("Text template Cooldown") is None and s.get("Text template Tip exchange") is None
+    assert len(os.listdir(client.tmp / "state" / "backups")) >= 2  # a backup before each save
+    # the config check still applies: a bad value of a fork option cannot be saved by a logbook admin
+    bad = [{"op": "set", "section": "STM", "key": "HTML editor", "value": "Quill"}]
+    assert client.post("/api/apply", json={"etag": r.json["etag"], "ops": bad}, headers=H).status_code == 400
