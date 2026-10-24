@@ -179,9 +179,10 @@ running across reboots.
   so it sees the configuration folder at `ELOG_DIR` and the data folder at
   `ELOG_DATA_DIR`, exactly the paths used in `elogd.cfg`. For an elogd on the
   host these are mounted from the same paths. If elogd runs in Docker with its
-  folders somewhere else on the host (e.g. in a home directory), set
+  folders somewhere else on the host (e.g. in a home directory), set only
   `ELOG_DIR_HOST` and `ELOG_DATA_HOST` to those host folders, the same values as
-  in the ELOG compose project. Other files that `elogd.cfg` refers to must be in
+  in the ELOG compose project; `ELOG_DIR` and `ELOG_DATA_DIR` keep their defaults
+  `/usr/local/elog` and `/mnt/elog_data`, the fixed paths of the ELOG container. Other files that `elogd.cfg` refers to must be in
   one of the two folders.
 * Backups, the change log and the session key go into the `state` volume
   (`docker compose exec elog-manager ls /state/backups`). The container needs
