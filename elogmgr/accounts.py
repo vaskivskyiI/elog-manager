@@ -75,6 +75,8 @@ class AccountStore:
 
     def apply(self, change: Change, user: str) -> dict:
         path = self._path()
+        # store names the way elogd would for its page encoding
+        change.charset = self.store.load()[0].global_.get("charset") or "ISO-8859-1"
         with _lock:
             reload = {"ok": True, "message": ""}
             with open(path, "rb") as f:

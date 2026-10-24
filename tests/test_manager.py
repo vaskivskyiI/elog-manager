@@ -192,6 +192,41 @@ def test_option_catalog():
     assert check_value(lookup("Entries per page"), "fifty") and not check_value(lookup("Restrict edit time"), "0.5")
 
 
+def test_custom_options(client):
+    def unknown(st):
+        return [i for i in st["issues"] if "not in ELOG's option reference" in i["message"]]
+    login(client, "alice")
+    st = client.get("/api/state").json
+    r = client.post("/api/apply", json={"etag": st["etag"], "ops": [
+        {"op": "set", "section": "STM", "key": "Show admin", "value": "0"}]}, headers=H)
+    assert r.status_code == 200
+    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show admin"]
+    # only managers may register; official names are refused
+    login(client, "bob")
+    assert client.post("/api/custom_options", json={"option": {"name": "Show admin"}}, headers=H).status_code == 403
+    login(client, "alice")
+    assert client.post("/api/custom_options", json={"option": {"name": "Reverse sort"}}, headers=H).status_code == 400
+    assert client.post("/api/custom_options", json={"option": {"name": "X", "type": "enum", "values": ["a"]}},
+                       headers=H).status_code == 400
+    r = client.post("/api/custom_options", json={"option": {"name": "Show admin", "type": "bool", "default": "1",
+                                                            "desc": "Show the admin link"}}, headers=H)
+    assert r.status_code == 200, r.json
+    st = client.get("/api/state").json
+    assert unknown(st) == []
+    opt = next(o for o in client.get("/api/options").json["options"] if o["name"] == "Show admin")
+    assert opt["custom"] and opt["type"] == "bool" and opt["default"] == "1"
+    assert (client.tmp / "state" / "custom_options.json").exists()
+    # values are now checked like official options
+    bad = [{"op": "set", "section": "STM", "key": "Show admin", "value": "yes"}]
+    assert client.post("/api/apply", json={"etag": st["etag"], "ops": bad}, headers=H).status_code == 400
+    # pattern options work too
+    client.post("/api/custom_options", json={"option": {"name": "Unit <attribute>"}}, headers=H)
+    from elogmgr.options import lookup
+    assert lookup("Unit Power")["name"] == "Unit <attribute>"
+    assert client.post("/api/custom_options", json={"op": "delete", "name": "Show admin"}, headers=H).status_code == 200
+    assert [i["key"] for i in unknown(client.get("/api/state").json)] == ["Show admin"]
+
+
 def test_config_check_blocks_new_errors(client):
     bad = [{"op": "set", "section": "stm005", "key": "Entries per page", "value": "fifty"}]
     login(client, "bob")
@@ -268,7 +303,9 @@ def test_manager_creates_account_like_elogd(client):
     assert r.status_code == 200, r.json
     raw = (client.tmp / "passwords.pwd").read_bytes()
     assert raw.startswith(b'<?xml version="1.0" encoding="ISO-8859-1"?>')
-    assert "Dóra Čuk".encode() in raw and b"&#" not in raw  # elogd does not decode numeric references
+    # no "charset" in elogd.cfg -> ISO-8859-1 pages: ó as one byte, Č as a reference (what a browser sends)
+    # (the reference's "&" is XML-escaped in the file, exactly as mxml writes it)
+    assert b"<full_name>D\xf3ra &amp;#268;uk</full_name>" in raw
     u = find_user(parse(raw), "dora")
     assert [c.tag for c in u] == ["name", "password", "full_name", "last_logout", "last_activity", "email",
                                   "inactive", "email_notify"]
@@ -276,6 +313,19 @@ def test_manager_creates_account_like_elogd(client):
     assert login(client, "dora").status_code == 401  # password is not "demo"
     assert client.post("/api/login", json={"user": "dora", "password": "longenough"}).status_code == 200
     assert client.get("/api/state").json["me"]["account"]["full_name"] == "Dóra Čuk"
+
+
+def test_names_are_read_and_written_like_elogd():
+    from elogmgr.elogpwd import from_file, to_file
+    # stored by ELOG with UTF-8 pages, with ISO-8859-1 pages (references for č/ž), and cp1252 bytes
+    assert from_file("Tomaž Čuk".encode().decode("latin-1")) == "Tomaž Čuk"
+    assert from_file("Toma&#382; &#268;uk M\xfcller") == "Tomaž Čuk Müller"
+    assert from_file("Euro \x80") == "Euro €"
+    assert from_file("A &quot;B&quot;") == 'A "B"'
+    assert to_file("Tomaž Müller", "ISO-8859-1") == "Toma&#382; M\xfcller"
+    assert to_file("Tomaž", "UTF-8").encode("latin-1") == "Tomaž".encode()
+    for cs in ("UTF-8", "ISO-8859-1"):
+        assert from_file(to_file('Č "x" ü', cs)) == 'Č "x" ü'
 
 
 def test_own_account_and_passwords(client):

@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import html
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -96,22 +97,37 @@ class ElogUser:
 # ---------------------------------------------------------------------
 # Reading and writing the file the way elogd (mxml) does
 #
-# mxml declares ISO-8859-1 but stores the bytes it was given (UTF-8 from the
-# browser), and it only decodes &lt; &gt; &amp; &quot; &apos; - a numeric
-# reference like &#269; would show up literally.  So the file is handled as
-# raw bytes: every byte becomes one character (latin-1), text for display is
-# decoded as UTF-8, and new text is stored as UTF-8 bytes.
+# mxml declares ISO-8859-1 but stores the bytes it was given, and it only
+# decodes &lt; &gt; &amp; &quot; &apos;.  elogd stores a full name as the
+# browser sent it, with < > " turned into &lt; &gt; &quot; (strencode2), and
+# prints it into its pages unchanged.  What the browser sends depends on
+# ELOG's page encoding ([global] charset, default ISO-8859-1): with UTF-8 the
+# name is UTF-8 bytes; with ISO-8859-1 it is one byte per character, and
+# characters outside ISO-8859-1 (č, ž, ...) arrive as references like &#269;.
+#
+# So the file is handled as raw bytes (every byte one latin-1 character),
+# names are decoded whichever way they were stored, and new names are
+# stored the way elogd itself would store them for the configured charset.
 # ---------------------------------------------------------------------
 
+def is_utf8(charset: str | None) -> bool:
+    return (charset or "").replace("-", "").replace("_", "").lower() == "utf8"
+
+
 def from_file(s: str) -> str:
+    raw = s.encode("latin-1")
     try:
-        return s.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return s
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")  # browsers send cp1252 for "ISO-8859-1" pages
+    return html.unescape(text)
 
 
-def to_file(s: str) -> str:
-    return s.encode("utf-8").decode("latin-1")
+def to_file(s: str, charset: str | None = None) -> str:
+    s = s.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    if is_utf8(charset):
+        return s.encode("utf-8").decode("latin-1")
+    return "".join(c if ord(c) < 256 else f"&#{ord(c)};" for c in s)
 
 
 def parse(raw: bytes) -> ET.Element:
@@ -219,6 +235,7 @@ def validate_profile(full_name: str | None, email: str | None) -> None:
 class Change:
     """An idempotent change to the password file."""
     description = ""
+    charset = "ISO-8859-1"  # ELOG's [global] charset; set by AccountStore before apply()
 
     def apply(self, root: ET.Element) -> None:
         raise NotImplementedError
@@ -241,13 +258,13 @@ class CreateUser(Change):
         if find_user(root, self.name) is not None:
             raise AccountError(f"An account '{self.name}' already exists")
         u = ET.SubElement(root, "user")  # same fields and order as elogd's own "new user"
-        ET.SubElement(u, "name").text = to_file(self.name)
+        ET.SubElement(u, "name").text = to_file(self.name, self.charset)
         pw = ET.SubElement(u, "password", {"encoding": "SHA256"})
         pw.text = self.hash
-        ET.SubElement(u, "full_name").text = to_file(self.full_name)
+        ET.SubElement(u, "full_name").text = to_file(self.full_name, self.charset)
         ET.SubElement(u, "last_logout").text = "0"
         ET.SubElement(u, "last_activity").text = "0"
-        ET.SubElement(u, "email").text = to_file(self.email)
+        ET.SubElement(u, "email").text = to_file(self.email, self.charset)
         ET.SubElement(u, "inactive").text = "1" if self.inactive else "0"
         ET.SubElement(u, "email_notify")
 
@@ -271,9 +288,9 @@ class UpdateUser(Change):
     def apply(self, root):
         u = self._user(root)
         if self.full_name is not None:
-            _set_child(u, "full_name", to_file(self.full_name), after="password")
+            _set_child(u, "full_name", to_file(self.full_name, self.charset), after="password")
         if self.email is not None:
-            _set_child(u, "email", to_file(self.email), after="last_activity")
+            _set_child(u, "email", to_file(self.email, self.charset), after="last_activity")
         if self.inactive is not None:
             _set_child(u, "inactive", "1" if self.inactive else "0", after="email")
 

@@ -33,6 +33,9 @@ nav a.active { background: var(--accent-soft); color: var(--accent); }
 nav a b { background: var(--danger); color: #fff; border-radius: 10px; padding: 0 6px; font-size: 11px; }
 nav a b:empty { display: none; }
 .who { white-space: nowrap; color: var(--muted); }
+.pwrow { display: flex; gap: 6px; min-width: 0; }
+.pwrow input { flex: 1; min-width: 0; }
+.pwrow button { flex: none; padding: 6px 8px; }
 #whoami { color: inherit; text-decoration: none; } #whoami:hover { text-decoration: underline; }
 body:not(.super) .super-only { display: none !important; }
 
@@ -56,6 +59,7 @@ button:disabled { opacity: .5; cursor: default; }
 .spacer { flex: 1; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px 16px; }
+.grid2 > * { min-width: 0; }
 
 /* groups board */
 .board { columns: 340px; column-gap: 16px; }
@@ -85,6 +89,8 @@ button:disabled { opacity: .5; cursor: default; }
 .lb.missing .name { color: var(--danger); text-decoration: line-through; }
 .lb.readonly { cursor: default; }
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--info-soft); color: var(--muted); white-space: nowrap; }
+button.badge { border: none; cursor: pointer; font: inherit; font-size: 11px; }
+button.badge:hover { background: var(--accent-soft); color: var(--accent); }
 .badge.lock { background: var(--warn-soft); color: var(--warn); }
 .badge.err { background: var(--danger-soft); color: var(--danger); }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }

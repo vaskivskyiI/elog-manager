@@ -121,7 +121,7 @@ def _pattern(name: str) -> re.Pattern | None:
 
 
 @lru_cache(maxsize=1)
-def catalog() -> list[dict]:
+def official() -> list[dict]:
     with open(os.path.join(HERE, "options.json"), encoding="utf-8") as f:
         raw = json.load(f) + EXTRA
     out, seen = [], {}
@@ -146,8 +146,78 @@ def catalog() -> list[dict]:
     return out
 
 
-@lru_cache(maxsize=1)
+# ---------------------------------------------------------------------
+# Custom options: site-specific or undocumented keys that a manager has
+# registered, kept in <state dir>/custom_options.json and re-read when the
+# file changes.
+# ---------------------------------------------------------------------
+
+CUSTOM_TYPES = {"string": "<string>", "bool": "0|1", "number": "<number>", "list": "<list>",
+                "users": "<user list>", "enum": None}
+_custom = {"path": None, "mtime": None, "items": [], "version": 0}
+
+
+def set_custom_path(path: str | None) -> None:
+    _custom.update(path=path, mtime=None, items=[], version=_custom["version"] + 1)
+
+
+def _normalize_custom(o: dict) -> dict:
+    typ = o.get("type") if o.get("type") in CUSTOM_TYPES else "string"
+    values = [v.strip() for v in o.get("values") or [] if str(v).strip()] if typ == "enum" else []
+    name = " ".join(str(o.get("name", "")).split())
+    return {
+        "name": name,
+        "spec": "|".join(values) if typ == "enum" else CUSTOM_TYPES[typ],
+        "section": "Custom options", "doc": None,
+        "default": (str(o["default"]).strip() or None) if o.get("default") is not None else None,
+        "type": typ, "values": values,
+        "scope": "global" if o.get("scope") == "global" else "any",
+        "pattern": "<" in name,
+        "desc": str(o.get("desc") or "").strip(),
+        "custom": True,
+    }
+
+
+def custom_options() -> list[dict]:
+    path = _custom["path"]
+    if not path or not os.path.exists(path):
+        if _custom["items"]:
+            _custom.update(mtime=None, items=[], version=_custom["version"] + 1)
+        return []
+    mtime = os.path.getmtime(path)
+    if mtime != _custom["mtime"]:
+        try:
+            with open(path, encoding="utf-8") as f:
+                items = [_normalize_custom(o) for o in json.load(f) if isinstance(o, dict) and o.get("name")]
+        except (OSError, ValueError):
+            items = []
+        _custom.update(mtime=mtime, items=items, version=_custom["version"] + 1)
+    return _custom["items"]
+
+
+def save_custom_options(items: list[dict]) -> None:
+    path = _custom["path"]
+    if not path:
+        raise ValueError("No state directory for custom options")
+    keep = [{k: o[k] for k in ("name", "type", "values", "scope", "default", "desc")} for o in items]
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(keep, f, indent=1, ensure_ascii=False)
+    os.replace(tmp, path)
+    _custom["mtime"] = None  # re-read on next use
+
+
+def catalog() -> list[dict]:
+    return official() + custom_options()
+
+
+_index_cache: dict = {}
+
+
 def _index():
+    token = _custom["version"]  # changes on every re-read, even within one mtime tick
+    if _index_cache.get("token", object()) == token and "data" in _index_cache:
+        return _index_cache["data"]
     exact, patterns = {}, []
     for o in catalog():
         if o["pattern"]:
@@ -155,11 +225,13 @@ def _index():
         else:
             exact.setdefault(norm(o["name"]), o)
     patterns.sort(key=lambda p: -len(p[1]["name"]))  # most specific first
+    _index_cache.update(token=token, data=(exact, patterns))
     return exact, patterns
 
 
 def lookup(key: str) -> dict | None:
     _, bare = strip_condition(key)
+    custom_options()  # pick up changes to the custom file
     exact, patterns = _index()
     k = norm(bare)
     if k in exact:

@@ -895,7 +895,9 @@ function kvTable(E, rerender, inherit) {
           h("input", { value: k, title: o ? `${o.name} = ${o.spec}${o.desc ? "\n" + o.desc : ""}` : "Not in ELOG's option reference",
             onchange: (e) => { const nk = e.target.value.trim(); if (nk) E.items[i][0] = nk; rerender(); } }),
           o ? (o.doc ? h("a", { class: "hint", href: o.doc, target: "_blank", rel: "noopener", title: "ELOG documentation" }, "?") : null)
-            : h("span", { class: "badge", title: "Not in ELOG's option reference: check the spelling" }, "?"))),
+            : isSuper() ? h("button", { class: "badge", title: "Not a known option. Click to register it as a custom option",
+                onclick: () => customOptionDialog({ name: splitCond(k)[1].trim() }) }, "?")
+              : h("span", { class: "badge", title: "Not in ELOG's option reference: check the spelling" }, "?"))),
         h("td", {}, h("input", { value: v, placeholder: inh ? `${inh.from}: ${inh.value}` : o ? o.spec : "",
           onchange: (e) => { E.items[i][1] = e.target.value.trim(); rerender(); } })),
         h("td", { style: "width:1%" }, h("button", { class: "link", style: "color:var(--danger)", title: "Delete setting",
@@ -908,7 +910,7 @@ function kvTable(E, rerender, inherit) {
       inherit ? h("span", { class: "hint" }, "Settings not listed here inherit from [global].") : null),
     h("div", { style: "margin-top:4px" }, spec),
     h("datalist", { id: "kv-keys" }, allKeys.map((k) => { const o = optLookup(k); return h("option", { value: k }, o && o.desc ? o.desc : ""); })),
-    h("p", { class: "hint" }, `${S.opts.list.length} options from `,
+    h("p", { class: "hint" }, `${S.opts.list.filter((o) => !o.custom).length} options from `,
       h("a", { href: "https://elog.psi.ch/elog/config.html", target: "_blank", rel: "noopener" }, "ELOG's option reference"),
       ". Pattern options like Options <attribute> are set per attribute on the Attributes tab."));
 }
@@ -1069,7 +1071,7 @@ function genPassword() {
 /** Password field with "generate" and "show" buttons. */
 function passwordInput(placeholder) {
   const inp = h("input", { type: "password", autocomplete: "new-password", placeholder, minlength: 8 });
-  const box = h("div", { class: "row", style: "flex-wrap:nowrap" }, inp,
+  const box = h("div", { class: "pwrow" }, inp,
     h("button", { type: "button", title: "Generate a random password", onclick: () => { inp.value = genPassword(); inp.type = "text"; } }, "Generate"),
     h("button", { type: "button", onclick: () => { inp.type = inp.type === "password" ? "text" : "password"; } }, "Show"));
   return [box, inp];
@@ -1221,7 +1223,10 @@ function viewIssues() {
       h("span", { class: "lvl" }, i.level),
       h("span", { class: "msg" }, lbByName(i.section) ? h("a", { href: "#/logbook/" + encodeURIComponent(i.section) + "/all" }, `[${i.section}]`)
         : h("b", {}, `[${i.section}]`), " ", i.message),
-      i.fix && (isSuper() || (lbByName(i.section) || {}).editable) ? h("button", { onclick: () => commit([toOp(i.fix)], "Fix: " + i.message) }, "Fix") : null))),
+      i.fix && (isSuper() || (lbByName(i.section) || {}).editable) ? h("button", { onclick: () => commit([toOp(i.fix)], "Fix: " + i.message) }, "Fix") : null,
+      i.key && isSuper() && i.message.includes("not in ELOG's option reference")
+        ? h("button", { title: "Register it as a custom option so it counts as known",
+            onclick: () => customOptionDialog({ name: splitCond(i.key)[1].trim() }) }, "Make known…") : null))),
     h("p", { class: "muted" }, "Checks: unknown options (typos), group references, users missing from the password file, ",
       "attributes referenced but not defined, unused option tags, malformed styles, duplicate keys/sections."));
 }
@@ -1263,7 +1268,69 @@ function viewGlobal() {
     ops.length ? h("div", { class: "pending" }, h("b", {}, `${ops.length} unsaved change(s)`), h("span", { class: "spacer" }),
       h("button", { onclick: () => { S.gEditor = null; render(); } }, "Discard"),
       h("button", { class: "primary", onclick: async () => { if (await commit(ops, "Edit global settings")) S.gEditor = null; } }, "Review & save")) : null,
-    kvTable(E, () => render(), null));
+    kvTable(E, () => render(), null),
+    customOptionsCard());
+}
+
+const CUSTOM_TYPE_LABELS = [["string", "text"], ["bool", "yes / no"], ["number", "number"], ["list", "comma-separated list"],
+  ["users", "list of user names"], ["enum", "choice from a list"]];
+
+/** Managers' list of site-specific options that count as known. */
+function customOptionsCard() {
+  const custom = S.opts.list.filter((o) => o.custom);
+  return h("div", { class: "card", style: "margin-top:16px" },
+    h("div", { class: "toolbar" }, h("h3", { style: "margin:0" }, "Custom options"), h("span", { class: "spacer" }),
+      h("button", { onclick: () => customOptionDialog({}) }, "Add custom option")),
+    h("p", { class: "hint", style: "margin-top:0" }, "Options that are not in ELOG's reference (site-specific or undocumented). ",
+      "Registered ones are treated as known: no notice, a matching input field, and their values are checked before saving."),
+    custom.length ? h("table", {}, h("thead", {}, h("tr", {}, ["Option", "Type", "Where", "Default", "Description", ""].map((t) => h("th", {}, t)))),
+      h("tbody", {}, custom.map((o) => h("tr", {},
+        h("td", {}, h("b", {}, o.name)),
+        h("td", {}, (CUSTOM_TYPE_LABELS.find(([t]) => t === o.type) || [, o.type])[1], o.type === "enum" ? `: ${o.values.join(", ")}` : ""),
+        h("td", {}, o.scope === "global" ? "[global] only" : "anywhere"),
+        h("td", {}, o.default || ""), h("td", { class: "muted" }, o.desc || ""),
+        h("td", { style: "white-space:nowrap" },
+          h("button", { class: "link", onclick: () => customOptionDialog(o) }, "Edit"), " ",
+          h("button", { class: "link", style: "color:var(--danger)", onclick: async () => {
+            const ok = await modal(`Remove custom option '${o.name}'?`, h("p", {}, "Settings using it stay in elogd.cfg; they are just reported as unknown again."),
+              [{ label: "Remove", class: "danger" }]);
+            if (ok) await saveCustomOption({ op: "delete", name: o.name }, `Custom option '${o.name}' removed`);
+          } }, "Remove")))))) : h("p", { class: "muted" }, "None yet."));
+}
+
+async function saveCustomOption(body, done) {
+  try {
+    await api("POST", apiUrl("/api/custom_options"), body);
+    S.opts = null;
+    await reload();
+    toast(done);
+    return true;
+  } catch (e) { toast(e.message, true); return false; }
+}
+
+async function customOptionDialog(o) {
+  const name = h("input", { value: o.name || "", placeholder: "e.g. Show admin, or Foo <attribute>" });
+  const valuesInp = h("input", { value: (o.values || []).join(", "), placeholder: "A, B, C" });
+  const valuesRow = h("label", { style: "grid-column:1/-1" }, "Allowed values", valuesInp);
+  const type = h("select", { onchange: () => (valuesRow.hidden = type.value !== "enum") },
+    CUSTOM_TYPE_LABELS.map(([v, l]) => h("option", { value: v, selected: (o.type || "string") === v }, l)));
+  valuesRow.hidden = type.value !== "enum";
+  const scope = h("select", {}, h("option", { value: "any", selected: o.scope !== "global" }, "logbooks and [global]"),
+    h("option", { value: "global", selected: o.scope === "global" }, "[global] only"));
+  const def = h("input", { value: o.default || "", placeholder: "what ELOG does when it is not set" });
+  const desc = h("input", { value: o.desc || "", placeholder: "short description shown next to the field" });
+  const body = h("div", { class: "grid2" },
+    h("label", {}, "Option name", name), h("label", {}, "Value type", type), valuesRow,
+    h("label", {}, "Where it can be set", scope), h("label", {}, "Default", def),
+    h("label", { style: "grid-column:1/-1" }, "Description", desc),
+    h("p", { class: "hint", style: "grid-column:1/-1" }, "Use <attribute> in the name for per-attribute options. ",
+      "Custom options are stored by the manager (custom_options.json in its state directory), not in elogd.cfg."));
+  const ok = await modal(o.custom ? `Custom option '${o.name}'` : "Register a custom option", body, [{ label: "Save",
+    validate: () => !!name.value.trim() || (toast("Name is required", true), false) }]);
+  if (!ok) return;
+  await saveCustomOption({ op: "save", original: o.custom ? o.name : null, option: {
+    name: name.value.trim(), type: type.value, values: splitList(valuesInp.value), scope: scope.value,
+    default: def.value.trim(), desc: desc.value.trim() } }, `'${name.value.trim()}' is now a known option`);
 }
 
 function viewRaw() {

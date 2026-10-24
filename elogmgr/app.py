@@ -13,9 +13,10 @@ from flask import Flask, abort, jsonify, request, send_from_directory, session
 
 from .accounts import AccountStore
 from .elogpwd import AccountError, CreateUser, DeleteUser, SetPassword, UpdateUser
-from .elogcfg import ElogConfig, Line, join_list, norm
+from .elogcfg import ElogConfig, Line, join_list, norm, strip_condition
 from .lint import author_problem, ensure_author, lint
-from .options import COMMON, catalog
+from . import options as options_mod
+from .options import COMMON, catalog, lookup
 from .reload import reload_elogd
 from .settings import SetupError, check_paths, from_env, load_env_file, secret_key
 from .store import ConflictError, Store, unified_diff
@@ -57,6 +58,7 @@ def create_app(settings: dict | None = None) -> Flask:
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     accounts = AccountStore(store, settings)
+    options_mod.set_custom_path(os.path.join(store.state_dir, "custom_options.json"))
     failures: dict[str, list[float]] = defaultdict(list)
     auth_header = settings.get("auth_header") or ""
 
@@ -189,6 +191,37 @@ def create_app(settings: dict | None = None) -> Flask:
     @require_login
     def options(user, role, cfg, etag):
         return jsonify(options=catalog(), common=COMMON)
+
+    @app.post("/api/custom_options")
+    @require_login
+    def custom_options_api(user, role, cfg, etag):
+        """Managers register site-specific options so they count as known (type, scope, description)."""
+        if role != "super":
+            return jsonify(error="Only managers can define custom options"), 403
+        data = request.get_json(force=True, silent=True) or {}
+        items = [dict(o) for o in options_mod.custom_options()]
+        original = norm(str(data.get("original") or ""))
+        if data.get("op") == "delete":
+            name = norm(str(data.get("name", "")))
+            items = [o for o in items if norm(o["name"]) != name]
+            detail = data.get("name")
+        else:
+            o = data.get("option") or {}
+            name = " ".join(str(o.get("name", "")).split())
+            _, bare = strip_condition(name)
+            if not bare or bare != name or any(c in name for c in "=[]#;"):
+                return jsonify(error="Enter the option name without value, condition or [ ] = # ;"), 400
+            official = next((x for x in options_mod.official() if norm(x["name"]) == norm(name)), None)
+            if official or (lookup(name) and not lookup(name).get("custom")):
+                return jsonify(error=f"'{name}' is already an ELOG option"), 400
+            if o.get("type") == "enum" and len([v for v in o.get("values") or [] if str(v).strip()]) < 2:
+                return jsonify(error="A choice list needs at least two values"), 400
+            new = options_mod._normalize_custom(o)
+            items = [x for x in items if norm(x["name"]) not in (norm(name), original)] + [new]
+            detail = name
+        options_mod.save_custom_options(items)
+        store._audit(user, f"custom option {data.get('op') or 'save'}", {"option": detail}, None)
+        return jsonify(ok=True, options=options_mod.catalog())
 
     @app.get("/api/check_name")
     @require_login

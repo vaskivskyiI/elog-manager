@@ -36,6 +36,15 @@ a field is empty, as placeholder text: the `[global]` value (`global: 40`),
 otherwise ELOG's default (`default: 20`). `tools/build_options.py` rebuilds the
 catalog from the reference; the descriptions are our own short summaries.
 
+**Custom options.** Site-specific or undocumented keys (for example
+`Show admin`) are reported as "not in ELOG's option reference". A manager can
+register them, either from that notice (*Make known…*), from the "?" badge in
+*All settings*, or under *Global settings → Custom options*, with a value type,
+where they may be set, a default and a description. Registered options count as
+known: no notice, a matching input field, and their values are checked before
+saving. They are stored in `custom_options.json` in the state directory, not in
+`elogd.cfg`.
+
 **Author policy.** Every logbook has an `Author` attribute that is filled in
 automatically (`Preset Author`, e.g. `$long_name`) and locked. Settings in
 `[global]` count. New logbooks get this automatically, the Attributes tab
