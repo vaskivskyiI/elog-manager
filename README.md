@@ -175,9 +175,14 @@ effectively root, so don't add `elog` to it. The container itself runs as
 `ELOG_UID:ELOG_GID`, whoever starts it, and `restart: unless-stopped` keeps it
 running across reboots.
 
-* The ELOG directory is mounted at the **same path** inside the container, so
-  paths in `elogd.cfg` resolve the same way. If `passwords.pwd` or the state
-  directory live elsewhere, add volumes for them in `docker-compose.yml`.
+* The manager reads the paths in `elogd.cfg` (`Password file`, `Logbook dir`),
+  so it sees the configuration folder at `ELOG_DIR` and the data folder at
+  `ELOG_DATA_DIR`, exactly the paths used in `elogd.cfg`. For an elogd on the
+  host these are mounted from the same paths. If elogd runs in Docker with its
+  folders somewhere else on the host (e.g. in a home directory), set
+  `ELOG_DIR_HOST` and `ELOG_DATA_HOST` to those host folders, the same values as
+  in the ELOG compose project. Other files that `elogd.cfg` refers to must be in
+  one of the two folders.
 * Backups, the change log and the session key go into the `state` volume
   (`docker compose exec elog-manager ls /state/backups`). The container needs
   write access to `elogd.cfg` itself. If the directory holding it is not

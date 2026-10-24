@@ -1,10 +1,13 @@
-# ELOG Manager next to an elogd that runs on the host.
+# ELOG Manager next to an elogd that runs on the host or in Docker.
 #
-#   cp .env.example .env        # ELOG_DIR, ELOG_UID, ELOG_GID
+#   cp .env.example .env        # ELOG_DIR, ELOG_UID, ELOG_GID (+ *_HOST if elogd runs in Docker)
 #   sudo docker compose up -d --build
 #
-# The ELOG directory is mounted at the same path inside the container, so the
-# paths in elogd.cfg (e.g. "Password file") resolve the same way.
+# The manager reads the paths in elogd.cfg ("Password file", "Logbook dir"), so it
+# must see the configuration and data folders at exactly those paths:
+#   ELOG_DIR, ELOG_DATA_DIR    paths used in elogd.cfg (inside the containers)
+#   ELOG_DIR_HOST, ELOG_DATA_HOST   where these folders are on the host; default: the
+#                              same paths (native elogd)
 services:
   elog-manager:
     build: .
@@ -29,10 +32,9 @@ services:
     ports:
       - "127.0.0.1:${ELOGMGR_PORT:-8090}:8090"
     volumes:
-      - ${ELOG_DIR:-/usr/local/elog}:${ELOG_DIR:-/usr/local/elog}
+      - ${ELOG_DIR_HOST:-${ELOG_DIR:-/usr/local/elog}}:${ELOG_DIR:-/usr/local/elog}
+      - ${ELOG_DATA_HOST:-${ELOG_DATA_DIR:-/mnt/elog_data}}:${ELOG_DATA_DIR:-/mnt/elog_data}
       - state:/state
-      # Mount more directories if passwords.pwd lives outside ELOG_DIR, e.g.
-      # - /mnt/elog_data:/mnt/elog_data
 
 volumes:
   state:
