@@ -12,7 +12,8 @@ accounts.
 |------|---------|
 | **Logbooks** | Tree of groups and subgroups, in the same order as on ELOG's start page. Reorder logbooks inside a group and groups among their siblings with ↑ ↓ or by dragging. Drag logbooks between groups (Ctrl+drag copies, since a logbook can be in several groups). Drag a group by its title into another group to nest it, or onto *Not in any group* to make it top-level again. *+ Subgroup* creates a nested group. *New logbook* copies settings from a template, suggests the next name in a series (`np011`) and adds the logbook to its group. Tick logbooks to **bulk edit** a setting across all of them. |
 | **Logbook editor** | *Overview* (comment, titles, paging, list columns, quick filters, groups) · *Access* (login and admin users, with autocomplete from the password file) · *Attributes* (table: input type, options, required, locked, extendable, preset, comment; renaming an attribute updates every setting that refers to it) · *All settings* (key/value grid) · *Raw text*. |
-| **Users & access** | Pick a user to see every logbook they can open or administer, and toggle access with checkboxes. *Copy access from…* onboards a new person like an existing one. *Replace with…* fixes typos across all logbooks. Names in the config that do not match an account are listed separately. |
+| **Users & access** | Pick a user to see every logbook they can open or administer, and toggle access with checkboxes. *Copy access from…* onboards a new person like an existing one. *Replace with…* fixes typos across all logbooks. Names in the config that do not match an account are listed separately. Managers also create, edit, deactivate and delete ELOG accounts and set passwords (see *Accounts*). |
+| **My account** | Click your name in the top bar to change your own full name, e-mail and password. |
 | **Issues** | Linter: invalid option names (e.g. `extendable attributes`), groups that point to missing logbooks, users that do not exist, attributes referenced but not defined, malformed styles, duplicates. Many issues have a one-click fix. |
 | **History** | Who changed what. Every save first writes a timestamped backup that you can compare with the current file or restore. |
 | **Global settings / Raw config** | `[global]` key/value editor and a full-file editor (manager admins only). |
@@ -55,8 +56,8 @@ refused rather than overwriting their change.
 ## Who can sign in
 
 Every account in ELOG's password file can sign in with its ELOG password
-(SHA-256 crypt, as elogd 3.x stores it). Accounts and passwords stay managed in
-ELOG. What you can do depends on `elogd.cfg` alone:
+(SHA-256 crypt, as elogd 3.x stores it). What you can do depends on
+`elogd.cfg` alone:
 
 | Role | Who | Can |
 |------|-----|-----|
@@ -71,6 +72,28 @@ copy of a logbook you administer. Non-managers do not see other people's
 logbooks, the private `[global]` settings (paths, mail, accounts) or other
 users' e-mail addresses. Renaming and deleting logbooks, and restructuring
 groups, are left to managers.
+
+### Accounts
+
+Managers can create accounts, edit their full name and e-mail, deactivate them
+(they can no longer log in to ELOG or the manager, and running sessions end),
+set new passwords and delete them. Deleting can also remove the user from all
+logbook access lists. Everyone can change their own name, e-mail and password;
+changing your own password needs the current one.
+
+The manager writes `passwords.pwd` in the same layout and byte encoding as
+elogd. elogd keeps that file in memory, writes its copy back whenever a user is
+active, and only re-reads it on SIGHUP. So each account change is written,
+followed immediately by a reload, and then re-checked; if elogd wrote its old
+copy back in between, the change is applied again. Account changes therefore
+need a working reload (see *Applying changes*); without it the save message
+warns that elogd may undo the change. Before each change a copy of the file
+goes to the state directory (`backups/passwords.pwd.*`, readable by the owner
+only, the last 50 are kept).
+
+Passwords are stored the way elogd checks them: SHA-256 crypt without a salt.
+That is ELOG's format and cannot be strengthened from outside; keep
+`passwords.pwd` readable only by the elog user.
 
 If ELOG authenticates via the web server (`Authentication = Webserver`), set
 `ELOGMGR_AUTH_HEADER=X-Remote-User` so the manager trusts the user name your

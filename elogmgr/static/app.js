@@ -184,7 +184,7 @@ function render() {
   for (const a of document.querySelectorAll("#nav a"))
     a.classList.toggle("active", a.dataset.view === r.view || (r.view === "logbook" && a.dataset.view === "logbooks"));
   const app = $("#app");
-  const views = { logbooks: viewLogbooks, logbook: viewLogbook, users: viewUsers, issues: viewIssues,
+  const views = { logbooks: viewLogbooks, logbook: viewLogbook, users: viewUsers, issues: viewIssues, account: viewAccount,
     history: viewHistory, global: viewGlobal, raw: viewRaw };
   const scroll = window.scrollY;
   app.replaceChildren((views[r.view] || viewLogbooks)(r));
@@ -969,6 +969,7 @@ function viewUsers(r) {
   const countOf = (n) => refs[n] ? new Set(refs[n].login.concat(refs[n].admin)).size : 0;
 
   const list = h("div", { class: "card userlist" },
+    isSuper() ? h("button", { class: "primary", style: "width:100%;margin-bottom:6px", onclick: () => newAccount("") }, "New account") : null,
     h("input", { type: "search", placeholder: "Find user…", value: S.userFilter || "", style: "width:100%;margin-bottom:6px",
       oninput: (e) => { S.userFilter = e.target.value; render(); const i = $(".userlist input"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }),
     unknown.length ? h("div", { class: "muted", style: "cursor:default" }, "Not in password file") : null,
@@ -984,8 +985,9 @@ function viewUsers(r) {
   if (!sel) {
     detail = h("div", { class: "card" }, h("h2", {}, "Users & access"),
       h("p", {}, "Pick a user to see and change which logbooks they can access."),
-      h("p", { class: "muted" }, "Accounts and passwords are managed in ELOG itself (Config → Change password / admin user list). ",
-        "This page edits the 'Login user' and 'Admin user' lists of each logbook."),
+      h("p", { class: "muted" }, "Access is set by the 'Login user' and 'Admin user' lists of each logbook. ",
+        isSuper() ? "As a manager you can also create, edit, deactivate and delete ELOG accounts and set passwords."
+          : "You can change your own name, e-mail and password under My account (click your name at the top)."),
       !users.length ? h("p", { class: "error" }, "The password file could not be read, so only names found in elogd.cfg are listed.") : null);
   } else {
     const u = users.find((x) => x.name === sel);
@@ -1024,9 +1026,15 @@ function viewUsers(r) {
     detail = h("div", { class: "card" },
       h("div", { class: "toolbar" },
         h("div", {}, h("h2", { style: "margin:0" }, sel, u && u.full_name ? h("span", { class: "muted", style: "font-weight:400" }, " · " + u.full_name) : null),
-          u ? h("div", { class: "muted" }, [u.email, u.inactive ? "inactive" : null, u.last_activity ? "last activity " + fmtTime(u.last_activity) : null].filter(Boolean).join(" · "))
+          u ? h("div", { class: "muted" }, [u.email, u.inactive ? "inactive" : null, u.last_activity && u.last_activity !== "0" ? "last activity " + fmtTime(u.last_activity) : "never logged in"].filter(Boolean).join(" · "))
             : h("div", { class: "error" }, "Not an account in the password file: probably a typo or a removed user.")),
         h("span", { class: "spacer" }),
+        isSuper() && u ? [
+          h("button", { onclick: () => editAccount(u) }, "Edit account…"),
+          h("button", { onclick: () => setPassword(u.name) }, "Set password…"),
+          h("button", { class: "danger", onclick: () => deleteAccount(u.name) }, "Delete account…"),
+        ] : null,
+        isSuper() && !u ? h("button", { class: "primary", onclick: () => newAccount(sel) }, "Create account…") : null,
         h("button", { onclick: () => copyAccess(sel) }, "Copy access from…"),
         h("button", { onclick: () => replaceUser(sel) }, u ? "Rename in config…" : "Replace with…"),
         h("button", { class: "danger", onclick: () => removeUserEverywhere(sel) }, "Remove from all")),
@@ -1040,6 +1048,121 @@ function viewUsers(r) {
 }
 
 function fmtTime(t) { const n = +t; return n > 1e9 ? new Date(n * 1000).toLocaleDateString() : t; }
+
+// ============================================================ ACCOUNTS
+/** Change the ELOG password file; the server writes it, reloads elogd and checks the change stuck. */
+async function accountApi(body, done) {
+  try {
+    const r = await api("POST", apiUrl("/api/accounts"), body);
+    if (r.warning) toast(r.warning, true); else toast(done);
+    await reload();
+    return true;
+  } catch (e) { toast(e.message, true); return false; }
+}
+
+function genPassword() {
+  const chars = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(14));
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
+/** Password field with "generate" and "show" buttons. */
+function passwordInput(placeholder) {
+  const inp = h("input", { type: "password", autocomplete: "new-password", placeholder, minlength: 8 });
+  const box = h("div", { class: "row", style: "flex-wrap:nowrap" }, inp,
+    h("button", { type: "button", title: "Generate a random password", onclick: () => { inp.value = genPassword(); inp.type = "text"; } }, "Generate"),
+    h("button", { type: "button", onclick: () => { inp.type = inp.type === "password" ? "text" : "password"; } }, "Show"));
+  return [box, inp];
+}
+
+async function newAccount(prefill) {
+  const name = h("input", { value: prefill || "", placeholder: "login name, e.g. jdoe", autocomplete: "off" });
+  const full = h("input", { placeholder: "First Last" });
+  const email = h("input", { type: "email", placeholder: "name@example.org" });
+  const [pwBox, pw] = passwordInput("at least 8 characters");
+  const body = h("div", { class: "grid2" },
+    h("label", {}, "User name", name), h("label", {}, "Full name", full),
+    h("label", {}, "E-mail", email), h("label", {}, "Initial password", pwBox),
+    h("p", { class: "hint", style: "grid-column:1/-1" }, "Give the password to the person over a secure channel; ",
+      "they can change it under My account. Grant logbook access afterwards on this page."));
+  const ok = await modal("New ELOG account", body, [{ label: "Create account",
+    validate: () => (name.value.trim() && pw.value.length >= 8) || (toast("User name and a password of at least 8 characters are needed", true), false) }]);
+  if (!ok) return;
+  if (await accountApi({ op: "create", name: name.value.trim(), full_name: full.value, email: email.value, password: pw.value },
+    `Account '${name.value.trim()}' created`)) go("users", name.value.trim());
+}
+
+async function editAccount(u) {
+  const full = h("input", { value: u.full_name || "" });
+  const email = h("input", { type: "email", value: u.email || "" });
+  const active = h("input", { type: "checkbox", checked: !u.inactive, disabled: u.name === S.state.me.name });
+  const body = h("div", { class: "grid2" },
+    h("label", {}, "Full name", full), h("label", {}, "E-mail", email),
+    h("label", { class: "inline", style: "grid-column:1/-1" }, active,
+      "Active ", h("span", { class: "hint" }, "deactivated accounts cannot log in to ELOG or the manager; their entries stay")));
+  const ok = await modal(`Account '${u.name}'`, body, [{ label: "Save" }]);
+  if (!ok) return;
+  const change = { op: "update", name: u.name, full_name: full.value, email: email.value };
+  if (u.name !== S.state.me.name) change.inactive = !active.checked;
+  await accountApi(change, `Account '${u.name}' saved`);
+}
+
+async function setPassword(name) {
+  const [pwBox, pw] = passwordInput("at least 8 characters");
+  const ok = await modal(`New password for '${name}'`, h("div", {}, h("label", {}, "New password", pwBox),
+    h("p", { class: "hint" }, "The old password stops working immediately.")),
+  [{ label: "Set password", validate: () => pw.value.length >= 8 || (toast("At least 8 characters", true), false) }]);
+  if (ok) await accountApi({ op: "password", name, password: pw.value }, `Password of '${name}' changed`);
+}
+
+async function deleteAccount(name) {
+  const confirmInp = h("input", { placeholder: name });
+  const refs = lbsReferencing(name);
+  const cleanup = h("input", { type: "checkbox", checked: refs.length > 0, disabled: !refs.length });
+  const body = h("div", {},
+    h("p", {}, "The account is removed from ELOG's password file; entries written by this user stay. ",
+      "Consider deactivating instead if they may come back."),
+    h("label", { class: "inline" }, cleanup, `Also remove '${name}' from ${refs.length} logbook access list(s)`),
+    h("label", { style: "margin-top:10px" }, `Type '${name}' to confirm`, confirmInp));
+  const ok = await modal(`Delete account '${name}'?`, body, [{ label: "Delete account", class: "danger",
+    validate: () => confirmInp.value === name || (toast("Name does not match", true), false) }]);
+  if (!ok) return;
+  if (!(await accountApi({ op: "delete", name }, `Account '${name}' deleted`))) return;
+  if (cleanup.checked && refs.length)
+    await commit(refs.map(([section, key]) => ({ op: "list_remove", section, key, items: [name] })),
+      `Remove '${name}' from logbook access lists`);
+  go("users");
+}
+
+function viewAccount() {
+  const me = S.state.me;
+  const acc = me.account;
+  if (!acc) return h("div", { class: "card" }, h("h2", {}, "My account"),
+    h("p", { class: "muted" }, "Your account is not managed through ELOG's password file here."));
+  const full = h("input", { value: acc.full_name || "" });
+  const email = h("input", { type: "email", value: acc.email || "" });
+  const cur = h("input", { type: "password", autocomplete: "current-password" });
+  const [pwBox, pw] = passwordInput("at least 8 characters");
+  const pw2 = h("input", { type: "password", autocomplete: "new-password" });
+  const mine = S.state.logbooks.map((l) => l.name);
+  return h("div", { class: "grid2", style: "align-items:start" },
+    h("div", { class: "card" }, h("h2", {}, "My account"),
+      h("p", { class: "muted" }, `${me.name} · ${ROLE_LABEL[me.role]}`, mine.length ? ` · admin of ${mine.join(", ")}` : ""),
+      h("div", { style: "display:flex;flex-direction:column;gap:10px" },
+        h("label", {}, "Full name ", full), h("label", {}, "E-mail ", email),
+        h("div", {}, h("button", { class: "primary", onclick: () => accountApi(
+          { op: "update", name: me.name, full_name: full.value, email: email.value }, "Saved") }, "Save")))),
+    h("div", { class: "card" }, h("h2", {}, "Change password"),
+      h("div", { style: "display:flex;flex-direction:column;gap:10px" },
+        h("label", {}, "Current password", cur), h("label", {}, "New password", pwBox), h("label", {}, "Repeat new password", pw2),
+        h("div", {}, h("button", { class: "primary", onclick: async () => {
+          if (pw.value.length < 8) return toast("The new password needs at least 8 characters", true);
+          if (pw.type === "password" && pw.value !== pw2.value) return toast("The new passwords do not match", true);
+          if (await accountApi({ op: "password", name: me.name, current: cur.value, password: pw.value }, "Password changed"))
+            cur.value = pw.value = pw2.value = "";
+        } }, "Change password")),
+        h("p", { class: "hint" }, "This is your ELOG password: it changes for ELOG and this manager."))));
+}
 
 async function saveUserPending() {
   const ops = Object.entries(S.userPending).map(([k, on]) => {

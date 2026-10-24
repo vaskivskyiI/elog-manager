@@ -11,6 +11,8 @@ from functools import wraps
 
 from flask import Flask, abort, jsonify, request, send_from_directory, session
 
+from .accounts import AccountStore
+from .elogpwd import AccountError, CreateUser, DeleteUser, SetPassword, UpdateUser
 from .elogcfg import ElogConfig, Line, join_list, norm
 from .lint import author_problem, ensure_author, lint
 from .options import COMMON, catalog
@@ -54,6 +56,7 @@ def create_app(settings: dict | None = None) -> Flask:
     if settings.get("behind_proxy"):
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+    accounts = AccountStore(store, settings)
     failures: dict[str, list[float]] = defaultdict(list)
     auth_header = settings.get("auth_header") or ""
 
@@ -86,6 +89,11 @@ def create_app(settings: dict | None = None) -> Flask:
             if request.method != "GET" and request.headers.get("X-Requested-With") != "elogmgr":
                 return jsonify(error="Missing CSRF header"), 403
             cfg, etag = store.load()
+            if not auth_header:  # a deleted or deactivated account loses its session too
+                account = store.users(cfg).get(user)
+                if account is None or account.inactive:
+                    session.clear()
+                    return jsonify(error="Your account no longer exists or is deactivated"), 401
             return fn(user, role_of(cfg, user), cfg, etag, *a, **kw)
         return wrapper
 
@@ -153,7 +161,8 @@ def create_app(settings: dict | None = None) -> Flask:
                      for u in sorted(users.values(), key=lambda u: u.name.lower())]
         return {
             "etag": etag,
-            "me": {"name": user, "role": role},
+            "me": {"name": user, "role": role,
+                   "account": users[user].public() if user in users else None},
             "global": glob,
             "groups": groups,
             "logbooks": logbooks,
@@ -458,6 +467,49 @@ def create_app(settings: dict | None = None) -> Flask:
         except ConflictError as e:
             return jsonify(error=str(e), conflict=True), 409
         return jsonify(ok=True, etag=new_etag, new_issues=new_issues, reload=reload_elogd(settings))
+
+    # ---- accounts (ELOG password file) ---------------------------------
+    @app.post("/api/accounts")
+    @require_login
+    def accounts_api(user, role, cfg, etag):
+        """Managers manage every account; everyone may edit their own name, e-mail and password."""
+        data = request.get_json(force=True, silent=True) or {}
+        op, name = data.get("op"), str(data.get("name", "")).strip()
+        is_super, is_self = role == "super", name == user
+        text = lambda k: None if data.get(k) is None else str(data[k]).strip()  # noqa: E731
+        try:
+            if op == "create":
+                if not is_super:
+                    raise AccountError("Only managers can create accounts")
+                change = CreateUser(name, str(data.get("password", "")), text("full_name") or "",
+                                    text("email") or "", bool(data.get("inactive")))
+            elif op == "update":
+                if not (is_super or is_self):
+                    raise AccountError("You can only change your own account")
+                inactive = data.get("inactive")
+                if inactive is not None and (not is_super or is_self):
+                    raise AccountError("Managers can (de)activate other accounts, not their own")
+                change = UpdateUser(name, text("full_name"), text("email"),
+                                    None if inactive is None else bool(inactive))
+            elif op == "password":
+                if not (is_super or is_self):
+                    raise AccountError("You can only change your own password")
+                if is_self:  # also managers: changing your own password needs the current one
+                    me = store.users(cfg).get(user)
+                    if not me or not me.check(str(data.get("current", ""))):
+                        raise AccountError("The current password is not correct")
+                change = SetPassword(name, str(data.get("password", "")))
+            elif op == "delete":
+                if not is_super:
+                    raise AccountError("Only managers can delete accounts")
+                if is_self:
+                    raise AccountError("You cannot delete your own account")
+                change = DeleteUser(name)
+            else:
+                raise AccountError(f"Unknown operation '{op}'")
+            return jsonify(accounts.apply(change, user))
+        except AccountError as e:
+            return jsonify(error=str(e)), 400
 
     @app.post("/api/reload")
     @require_login

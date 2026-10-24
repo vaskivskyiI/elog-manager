@@ -74,7 +74,7 @@ def client(tmp_path):
     reload_cmd = f'"{sys.executable}" -c "open(r\'{marker}\', \'a\').write(\'x\')"'
     app = create_app({"elogd_cfg": str(tmp_path / "elogd.cfg"), "password_file": str(tmp_path / "passwords.pwd"),
                       "state_dir": str(tmp_path / "state"), "secret_key": "x", "secure_cookies": False,
-                      "reload_mode": "command", "reload_command": reload_cmd})
+                      "reload_mode": "command", "reload_command": reload_cmd, "account_settle": 0})
     c = app.test_client()
     c.tmp = tmp_path
     return c
@@ -251,6 +251,77 @@ def test_startup_explains_unwritable_state_dir(tmp_path, monkeypatch):
     with pytest.raises(SetupError) as e:
         create_app({"elogd_cfg": str(tmp_path / "elogd.cfg")})
     assert "sudo install -d -o elog -g elog" in str(e.value) and "ELOGMGR_STATE_DIR" in str(e.value)
+
+
+def account(c, **body):
+    return c.post("/api/accounts", json=body, headers=H)
+
+
+def test_manager_creates_account_like_elogd(client):
+    from elogmgr.elogpwd import find_user, parse
+    login(client, "grace")
+    assert account(client, op="create", name="dora", password="longenough").status_code == 400
+    login(client, "alice")
+    assert account(client, op="create", name="dora", password="short").status_code == 400
+    assert account(client, op="create", name="bad name", password="longenough").status_code == 400
+    r = account(client, op="create", name="dora", password="longenough", full_name="Dóra Čuk", email="d@example.org")
+    assert r.status_code == 200, r.json
+    raw = (client.tmp / "passwords.pwd").read_bytes()
+    assert raw.startswith(b'<?xml version="1.0" encoding="ISO-8859-1"?>')
+    assert "Dóra Čuk".encode() in raw and b"&#" not in raw  # elogd does not decode numeric references
+    u = find_user(parse(raw), "dora")
+    assert [c.tag for c in u] == ["name", "password", "full_name", "last_logout", "last_activity", "email",
+                                  "inactive", "email_notify"]
+    assert account(client, op="create", name="dora", password="longenough").status_code == 400  # exists
+    assert login(client, "dora").status_code == 401  # password is not "demo"
+    assert client.post("/api/login", json={"user": "dora", "password": "longenough"}).status_code == 200
+    assert client.get("/api/state").json["me"]["account"]["full_name"] == "Dóra Čuk"
+
+
+def test_own_account_and_passwords(client):
+    login(client, "carol")
+    assert account(client, op="update", name="carol", full_name="Carol C", email="c@example.org").status_code == 200
+    assert account(client, op="update", name="bob", full_name="x").status_code == 400  # someone else
+    assert account(client, op="update", name="carol", inactive=True).status_code == 400
+    assert account(client, op="password", name="carol", current="wrong", password="newpassword").status_code == 400
+    assert account(client, op="password", name="carol", current="demo", password="newpassword").status_code == 200
+    assert login(client, "carol").status_code == 401
+    login(client, "alice")  # managers reset other people's passwords without knowing them
+    assert account(client, op="password", name="carol", password="demodemo").status_code == 200
+    assert client.post("/api/login", json={"user": "carol", "password": "demodemo"}).status_code == 200
+
+
+def test_deactivate_and_delete(client):
+    other = client.application.test_client()
+    other.post("/api/login", json={"user": "carol", "password": "demo"})
+    assert other.get("/api/state").status_code == 200
+    login(client, "alice")
+    assert account(client, op="update", name="alice", inactive=True).status_code == 400  # not yourself
+    assert account(client, op="update", name="carol", inactive=True).status_code == 200
+    assert other.get("/api/state").status_code == 401  # running session ends
+    assert login(client, "carol").status_code == 401
+    assert account(client, op="delete", name="alice").status_code == 400
+    assert account(client, op="delete", name="carol").status_code == 200
+    assert "carol" not in (client.tmp / "passwords.pwd").read_text(encoding="latin-1")
+
+
+def test_account_change_survives_elogd_writing_old_copy(client, monkeypatch):
+    """elogd writes its in-memory copy back when a user is active; the change is re-applied."""
+    import elogmgr.accounts as accounts
+    pwd = client.tmp / "passwords.pwd"
+    original = pwd.read_bytes()
+    calls = []
+
+    def fake_reload(settings):
+        calls.append(1)
+        if len(calls) == 1:
+            pwd.write_bytes(original)  # elogd flushed its old tree before it saw the signal
+        return {"ok": True, "message": "elogd reloaded"}
+    monkeypatch.setattr(accounts, "reload_elogd", fake_reload)
+    login(client, "alice")
+    r = account(client, op="create", name="erin", password="longenough")
+    assert r.status_code == 200, r.json
+    assert len(calls) == 2 and b"<name>erin</name>" in pwd.read_bytes()
 
 
 def test_env_settings(tmp_path, monkeypatch):
