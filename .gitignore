@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+settings.json
+demo/elogd.cfg
+demo/passwords.pwd
+demo/settings.json
+demo/backups/
+
+# Real server configuration and its review stay local (the repository is public)
+ref/
+CONFIG_REVIEW.md
+.claude/

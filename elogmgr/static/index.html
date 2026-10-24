@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ELOG Manager</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <header id="topbar" hidden>
+    <div class="brand">ELOG <span>Manager</span></div>
+    <nav id="nav">
+      <a href="#/logbooks" data-view="logbooks">Logbooks</a>
+      <a href="#/users" data-view="users">Users &amp; access</a>
+      <a href="#/issues" data-view="issues">Issues <b id="issue-count"></b></a>
+      <a href="#/history" data-view="history">History</a>
+      <a href="#/global" data-view="global" class="super-only">Global settings</a>
+      <a href="#/raw" data-view="raw" class="super-only">Raw config</a>
+    </nav>
+    <div class="who">
+      <button id="reload" title="Make elogd re-read elogd.cfg (same as killall -HUP elogd)">Reload ELOG</button>
+      <span id="whoami"></span> <button id="logout" class="link">Log out</button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <section id="login" hidden>
+    <form id="login-form" class="card login">
+      <h1>ELOG <span>Manager</span></h1>
+      <p class="muted">Sign in with your ELOG account.</p>
+      <label>User name <input name="user" autocomplete="username" required autofocus></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="error"></p>
+      <button class="primary" type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <div id="modal-root"></div>
+  <div id="toast"></div>
+  <script src="static/app.js"></script>
+</body>
+</html>

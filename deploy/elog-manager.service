@@ -1,0 +1,18 @@
+[Unit]
+Description=ELOG Manager (web GUI for elogd.cfg)
+After=network.target elogd.service
+
+[Service]
+# Same account that owns elogd.cfg and passwords.pwd ("Usr = elog" in elogd.cfg).
+# Running as the same user as elogd lets the manager send it SIGHUP to reload.
+User=elog
+Group=elog
+WorkingDirectory=/opt/elog-manager
+ExecStart=/opt/elog-manager/venv/bin/python -m elogmgr --settings /opt/elog-manager/settings.json
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/usr/local/elog
+
+[Install]
+WantedBy=multi-user.target
