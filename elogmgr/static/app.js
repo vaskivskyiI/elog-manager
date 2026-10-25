@@ -162,6 +162,9 @@ function inherited(key, fromGlobal = true) {
   const o = optLookup(key);
   return o && o.default ? { from: "default", value: o.default } : null;
 }
+/** Whether a catalog option has an effect in [global] (isGlobal) or in a logbook. */
+const inScope = (o, isGlobal) => o.scope === "any" || o.scope === (isGlobal ? "global" : "logbook");
+const SCOPE_LABEL = { any: "logbooks and [global]", global: "[global] only", logbook: "logbooks only" };
 const yesNo = (v) => (v === "1" ? "yes" : v === "0" ? "no" : v);
 
 const ROLE_LABEL = { super: "manager", logbook_admin: "logbook admin", user: "user" };
@@ -601,7 +604,17 @@ const ATTR_PREFIXES = ["Preset on first reply", "Preset on reply", "Preset on ed
 const ATTR_LIST_KEYS = ["Required Attributes", "Locked Attributes", "Extendable options", "Fixed Attributes Reply",
   "Fixed Attributes Edit", "Propagate Attributes", "Quick filter", "List display", "Show Attributes",
   "Show Attributes Edit", "Show attributes reply", "Hidden attributes", "Sort Attributes"];
-const TPL = "Text template ";
+const TPL_TEXT = "Template text ", TPL_ATTR = "Template attributes ";
+/** The new name of an old template setting (Quick entries / Quick entry ... / Text template ...), else null. */
+function legacyTemplateKey(key) {
+  const k = splitCond(key)[1].trim().split(/\s+/).join(" "), nk = k.toLowerCase();
+  if (nk === "quick entries" || nk === "text templates") return "Templates";
+  if (nk === "quick entry title") return "Template title";
+  if (nk === "quick entry attributes") return "Template attributes";
+  for (const [old, now] of [["Text template attributes ", TPL_ATTR], ["Text template ", TPL_TEXT], ["Quick entry ", TPL_ATTR]])
+    if (nk.startsWith(old.toLowerCase())) return now + k.slice(old.length);
+  return null;
+}
 const OPT_KINDS = ["Options", "MOptions", "ROptions", "IOptions"];
 const TYPES = ["", "numeric", "date", "datetime", "userlist", "muserlist", "useremail", "museremail"];
 const BUILTIN = ["ID", "Date", "Subtext", "Text", "Attachments", "Edit", "Delete"];
@@ -705,42 +718,77 @@ class Editor {
     }
     return ops;
   }
-  /** Text templates in menu order: {own, list: [{name, content, from: "here" | "global" | null}]}. Without its own
-   *  "Text templates" a logbook offers the [global] list; elogd also looks up each "Text template <name>" there. */
+  /** Templates in menu order: {own, list: [{name, text, attrs, inherited}]}. Without its own "Templates" a logbook
+   *  offers the [global] list; elogd also looks up "Template text/attributes <name>" there. */
   templates() {
-    const own = this.get("Text templates") !== undefined;
-    const names = own ? this.list("Text templates") : splitList(globalVal("Text templates"));
-    return { own, list: names.map((name) => {
-      const v = this.get(TPL + name), g = globalVal(TPL + name);
-      return { name, content: v !== undefined ? v : g || "", from: v !== undefined ? "here" : g !== undefined ? "global" : null };
-    }) };
+    const own = this.get("Templates") !== undefined;
+    const names = own ? this.list("Templates") : splitList(globalVal("Templates"));
+    const val = (key) => { const v = this.get(key); return v !== undefined ? v : globalVal(key); };
+    return { own, list: names.map((name) => ({ name, text: val(TPL_TEXT + name) || "", attrs: val(TPL_ATTR + name) || "",
+      inherited: this.get(TPL_TEXT + name) === undefined && this.get(TPL_ATTR + name) === undefined
+        && (globalVal(TPL_TEXT + name) !== undefined || globalVal(TPL_ATTR + name) !== undefined) })) };
   }
-  /** "Text template <name>" settings whose name is not in the list (elogd ignores them). */
+  /** "Template text/attributes <name>" settings whose name is not in the list (elogd ignores them). */
   unlistedTemplates() {
     const listed = new Set(this.templates().list.map((t) => norm(t.name)));
-    return this.items.map(([k, v]) => [splitCond(k)[0], k.trim().split(/\s+/).join(" "), v])
-      .filter(([cond, k]) => !cond && norm(k).startsWith(norm(TPL) + " ") && !listed.has(norm(k.slice(TPL.length))))
-      .map(([, k, v]) => ({ name: k.slice(TPL.length), content: v }));
+    const out = new Map();
+    for (const [k, v] of this.items) {
+      const [cond, bare] = splitCond(k);
+      const key = bare.trim().split(/\s+/).join(" ");
+      for (const [prefix, field] of [[TPL_TEXT, "text"], [TPL_ATTR, "attrs"]]) {
+        if (cond || !norm(key).startsWith(norm(prefix) + " ")) continue;
+        const name = key.slice(prefix.length);
+        if (listed.has(norm(name))) continue;
+        const t = out.get(norm(name)) || { name, text: "", attrs: "" };
+        t[field] = v; out.set(norm(name), t);
+      }
+    }
+    return [...out.values()];
   }
   templateNames() { return this.templates().list.map((t) => t.name); }
-  addTemplate(name, content) {
-    this.setList("Text templates", [...this.templateNames().filter((n) => norm(n) !== norm(name)), name]);
-    if (content) this.set(TPL + name, content);
+  addTemplate(name, text, attrs) {
+    this.setList("Templates", [...this.templateNames().filter((n) => norm(n) !== norm(name)), name]);
+    if (text) this.set(TPL_TEXT + name, text);
+    if (attrs) this.set(TPL_ATTR + name, attrs);
   }
-  setTemplate(name, content) { this.set(TPL + name, content); }
+  setTemplate(name, field, value) { this.set((field === "text" ? TPL_TEXT : TPL_ATTR) + name, value); }
   renameTemplate(oldN, newN) {
-    this.setList("Text templates", this.templateNames().map((n) => (norm(n) === norm(oldN) ? newN : n)));
-    const i = this.items.findIndex(([k]) => norm(k) === norm(TPL + oldN));
-    if (i >= 0) this.items[i][0] = TPL + newN;
+    this.setList("Templates", this.templateNames().map((n) => (norm(n) === norm(oldN) ? newN : n)));
+    for (const prefix of [TPL_TEXT, TPL_ATTR]) {
+      const i = this.items.findIndex(([k]) => norm(k) === norm(prefix + oldN));
+      if (i >= 0) this.items[i][0] = prefix + newN;
+    }
   }
   removeTemplate(name) {
-    this.setList("Text templates", this.templateNames().filter((n) => norm(n) !== norm(name)));
-    this.set(TPL + name, null);
+    this.setList("Templates", this.templateNames().filter((n) => norm(n) !== norm(name)));
+    this.set(TPL_TEXT + name, null);
+    this.set(TPL_ATTR + name, null);
   }
   moveTemplate(i, d) {
     const l = this.templateNames();
     [l[i], l[i + d]] = [l[i + d], l[i]];
-    this.setList("Text templates", l);
+    this.setList("Templates", l);
+  }
+  /** Settings under the old names: Quick entries / Quick entry ... and Text templates / Text template ... */
+  legacyTemplates() { return this.items.filter(([k]) => !splitCond(k)[0] && legacyTemplateKey(k)); }
+  /** Rename the old settings to the Templates ones in place; one list, presets of the same template are joined. */
+  convertTemplates() {
+    const names = [];
+    const add = (n) => { if (!names.some((x) => norm(x) === norm(n))) names.push(n); };
+    if (this.get("Templates") !== undefined) this.list("Templates").forEach(add);
+    this.list("Quick entries").forEach(add);
+    this.list("Text templates").forEach(add);
+    const out = [];
+    for (const [k, v] of this.items) {
+      const to = splitCond(k)[0] ? null : legacyTemplateKey(k);
+      if (!to) { if (norm(k) !== "templates") out.push([k, v]); continue; }
+      const prev = out.find(([x]) => norm(x) === norm(to));
+      if (to === "Templates") { if (!prev) out.push(["Templates", names.join(", ")]); }
+      else if (!prev) out.push([to, v]);
+      else if (to.startsWith(TPL_ATTR.trim())) prev[1] = [prev[1], v].filter(Boolean).join(", ");
+    }
+    if (!out.some(([k]) => norm(k) === "templates") && names.length) out.unshift(["Templates", names.join(", ")]);
+    this.items = out;
   }
   groupsChanged() { return JSON.stringify([...this.groups].sort()) !== JSON.stringify([...this.origGroups].sort()); }
   dirty() { return this.ops().length > 0 || this.groupsChanged(); }
@@ -910,7 +958,7 @@ function tabAttributes(E, rerender) {
       "Extendable lets users add new option values when writing an entry."));
 }
 
-/** A template name must fit in "Text templates = A, B" and in the key "Text template <name>". */
+/** A template name must fit in "Templates = A, B" and in the keys "Template text <name>". */
 function templateNameProblem(name, names, except) {
   if (!name) return "Enter a name";
   if (/[,=#;[\]{}]/.test(name)) return "A template name cannot contain , = # ; [ ] { }";
@@ -920,65 +968,94 @@ function templateNameProblem(name, names, except) {
 }
 const oneLine = (s) => s.replace(/\s*[\r\n]+\s*/g, " ").trim();  // elogd.cfg values are single lines
 /** elogd reads the value as a file name unless it contains "<" (inline HTML) or "..". */
-const templateKind = (c) => (!c ? "empty" : /<|\.\./.test(c) ? "inline HTML" : "file in the logbook directory");
+const templateKind = (c) => (!c ? "no text" : /<|\.\./.test(c) ? "inline HTML" : "file in the logbook directory");
 const TPL_MAX = 9999;  // elogd reads at most this many characters of a template setting
+
+/** Fields named in "Attr=value, ..." that the logbook does not have. */
+function unknownPresetFields(E, value) {
+  const attrs = E.effList("Attributes").map((a) => a.toLowerCase());
+  return splitList(value).filter((p) => p.includes("=")).map((p) => p.split("=")[0].trim())
+    .filter((f) => attrs.length && !attrs.includes(f.toLowerCase()));
+}
 
 function tabTemplates(E, rerender) {
   const { own, list } = E.templates();
   const names = list.map((t) => t.name);
+  const legacy = E.legacyTemplates();
   const htmlEditor = E.get("HTML editor") || globalVal("HTML editor") || "TinyMCE";
-  const contentBox = (value, onchange, disabled) => h("textarea", { rows: 3, style: "width:100%", value, disabled, onchange,
-    placeholder: "<h3>Cooldown {{date}}</h3><p>Operator: {{author}}</p>   or a file name: templates/cooldown.html" });
-  const kindHint = (c) => h("span", { class: "hint", style: c.length > TPL_MAX ? "color:var(--danger)" : null },
+  const textBox = (value, onchange, disabled) => h("textarea", { rows: 2, style: "width:100%", value, disabled, onchange,
+    placeholder: "optional: <h3>Cooldown {{date}}</h3><p>Operator: {{author}}</p>   or a file: templates/cooldown.html" });
+  const attrsBox = (value, onchange, disabled) => h("input", { style: "width:100%", value, disabled, onchange,
+    placeholder: "optional: Category=Maintenance, Subject=LN2 refilled" });
+  const textHint = (c) => h("span", { class: "hint", style: c.length > TPL_MAX ? "color:var(--danger)" : null },
     templateKind(c), c.length > TPL_MAX ? ` · ${c.length} characters, elogd reads only ${TPL_MAX}` : "");
-  const row = (t, i) => h("tr", { class: getItem(E.orig, TPL + t.name) !== (t.from === "here" ? t.content : undefined) ? "changed" : "" },
-    h("td", { style: "width:22%" }, own
+  const attrsHint = (t) => {
+    const bad = unknownPresetFields(E, t.attrs);
+    if (bad.length) return h("span", { class: "hint", style: "color:var(--warn)" }, `not an attribute here: ${bad.join(", ")}`);
+    return h("span", { class: "hint" }, /(^|,)\s*subject\s*=/i.test(t.attrs) ? "" : `Subject: ${t.name}`);
+  };
+  const changed = (t) => getItem(E.orig, TPL_TEXT + t.name) !== E.get(TPL_TEXT + t.name)
+    || getItem(E.orig, TPL_ATTR + t.name) !== E.get(TPL_ATTR + t.name);
+  const row = (t, i) => h("tr", { class: changed(t) ? "changed" : "" },
+    h("td", { style: "width:20%" }, own
       ? h("input", { value: t.name, onchange: (e) => {
         const n = e.target.value.trim().split(/\s+/).join(" ");
         if (n === t.name) return;
         const p = templateNameProblem(n, names, t.name);
         if (p) { toast(p, true); return rerender(); }
         E.renameTemplate(t.name, n); rerender(); } })
-      : t.name),
-    h("td", {},
-      contentBox(t.content, (e) => { E.setTemplate(t.name, oneLine(e.target.value)); rerender(); }, !own),
-      h("div", {}, t.from === "global" ? h("span", { class: "hint" }, "from [global] · ") : null,
-        t.from === null ? h("span", { class: "hint", style: "color:var(--warn)" }, `no 'Text template ${t.name}' set: ELOG skips it`)
-          : kindHint(t.content))),
+      : t.name,
+      t.inherited ? h("div", { class: "hint" }, "from [global]") : null),
+    h("td", { style: "width:32%" }, attrsBox(t.attrs, (e) => { E.setTemplate(t.name, "attrs", oneLine(e.target.value)); rerender(); }, !own),
+      h("div", {}, attrsHint(t))),
+    h("td", {}, textBox(t.text, (e) => { E.setTemplate(t.name, "text", oneLine(e.target.value)); rerender(); }, !own),
+      h("div", {}, textHint(t.text))),
     h("td", { style: "white-space:nowrap;width:1%" }, own ? [
       h("button", { class: "link", disabled: i === 0, title: "Move up", onclick: () => { E.moveTemplate(i, -1); rerender(); } }, "↑"), " ",
       h("button", { class: "link", disabled: i === list.length - 1, title: "Move down", onclick: () => { E.moveTemplate(i, 1); rerender(); } }, "↓"), " ",
       h("button", { class: "link", style: "color:var(--danger)", onclick: () => { E.removeTemplate(t.name); rerender(); } }, "Remove")] : null));
   const unlisted = E.unlistedTemplates();
-  const nameInp = h("input", { placeholder: "Name, e.g. Cooldown", style: "width:100%" });
-  const contentInp = contentBox("", null);
+  const nameInp = h("input", { placeholder: "Name, e.g. LN2 refilled", style: "width:100%" });
+  const attrsInp = attrsBox("", null);
+  const textInp = textBox("", null);
   return h("div", { class: "card" },
+    legacy.length ? h("div", { class: "issue info", style: "margin-top:0" },
+      h("p", { style: "margin:0 0 6px" }, `${legacy.length} setting(s) use the old names Quick entries / Text templates. `,
+        "Both are one Templates menu now. Converting renames the settings; ELOG shows the same menu."),
+      h("button", { onclick: () => { E.convertTemplates(); rerender(); } }, "Convert to Templates")) : null,
     !own && list.length ? h("p", { class: "issue info", style: "margin-top:0" }, "This logbook offers the templates of [global]. ",
       "Adding a template gives it its own list, starting with these.") : null,
-    list.length ? h("table", {},
-      h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Content: inline HTML or file name"), h("th", {}))),
+    h("div", { class: "grid2" },
+      optField(E, "Template title", rerender, { hint: "title of the menu" }),
+      optField(E, "Template attributes", rerender, { hint: "presets of every template, e.g. Category=Maintenance" })),
+    list.length ? h("table", { style: "margin-top:12px" },
+      h("thead", {}, h("tr", {}, h("th", {}, "Name"), h("th", {}, "Fields: Attribute=value, ..."),
+        h("th", {}, "Text: inline HTML or file name"), h("th", {}))),
       h("tbody", {}, list.map(row)))
-      : h("p", { class: "muted", style: "margin-top:0" }, "No text templates yet."),
+      : h("p", { class: "muted" }, "No templates yet."),
     unlisted.length ? h("div", { style: "margin-top:12px" },
-      h("b", {}, "Not in the menu ", h("span", { class: "hint" }, "set, but not listed in Text templates, so ELOG ignores them")),
-      h("table", {}, h("tbody", {}, unlisted.map((t) => h("tr", {}, h("td", { style: "width:22%" }, t.name), h("td", { class: "muted" }, t.content),
+      h("b", {}, "Not in the menu ", h("span", { class: "hint" }, "set, but not listed in Templates, so ELOG ignores them")),
+      h("table", {}, h("tbody", {}, unlisted.map((t) => h("tr", {}, h("td", { style: "width:20%" }, t.name),
+        h("td", { class: "muted" }, [t.attrs, t.text].filter(Boolean).join(" · ")),
         h("td", { style: "white-space:nowrap;width:1%" },
           h("button", { class: "link", onclick: () => { E.addTemplate(t.name); rerender(); } }, "Add to menu"), " ",
-          h("button", { class: "link", style: "color:var(--danger)", onclick: () => { E.setTemplate(t.name, null); rerender(); } }, "Remove"))))))) : null,
+          h("button", { class: "link", style: "color:var(--danger)", onclick: () => { E.removeTemplate(t.name); rerender(); } }, "Remove"))))))) : null,
     h("h3", { style: "margin:16px 0 6px" }, "New template"),
     h("div", { class: "row", style: "align-items:flex-start;flex-wrap:nowrap" },
-      h("div", { style: "width:22%;flex-shrink:0" }, nameInp),
-      h("div", { style: "flex:1" }, contentInp),
+      h("div", { style: "width:20%;flex-shrink:0" }, nameInp),
+      h("div", { style: "width:32%;flex-shrink:0" }, attrsInp),
+      h("div", { style: "flex:1" }, textInp),
       h("button", { onclick: () => {
-        const n = nameInp.value.trim().split(/\s+/).join(" "), c = oneLine(contentInp.value);
-        const p = templateNameProblem(n, names) || (c ? null : "Enter the template's HTML or a file name");
+        const n = nameInp.value.trim().split(/\s+/).join(" ");
+        const p = templateNameProblem(n, names);
         if (p) return toast(p, true);
-        E.addTemplate(n, c); rerender(); } }, "Add template")),
-    htmlEditor.toLowerCase() !== "tinymce" ? h("p", { class: "issue warning", style: "margin-top:12px" },
-      `HTML editor is '${htmlEditor}': ELOG offers templates only in the TinyMCE editor.`) : null,
-    h("p", { class: "hint" }, "Templates appear in the Templates menu of ELOG's HTML editor (TinyMCE) and insert their content into the entry. ",
-      "Content is inline HTML (anything containing <) or the name of a file in the logbook directory, e.g. templates/cooldown.html. ",
-      "Line breaks are joined, because a setting in elogd.cfg is one line. Placeholders filled in on insert: ",
+        E.addTemplate(n, oneLine(textInp.value), oneLine(attrsInp.value)); rerender(); } }, "Add template")),
+    htmlEditor.toLowerCase() !== "tinymce" && list.some((t) => t.text) ? h("p", { class: "issue warning", style: "margin-top:12px" },
+      `HTML editor is '${htmlEditor}': ELOG inserts template texts only in the TinyMCE editor; the fields are still preset.`) : null,
+    h("p", { class: "hint" }, "Templates appear in the logbook menu ('New from template' or the title above) and open a new entry ",
+      "with the fields preset; Subject defaults to the template's name. A template with a text also inserts it, and appears in the ",
+      "Templates menu of ELOG's editor. Text is inline HTML (anything containing <) or the name of a file in the logbook directory. ",
+      "Line breaks are joined, because a setting in elogd.cfg is one line. Placeholders, in the text and in the fields: ",
       ["{{date}}", "{{time}}", "{{isodate}}", "{{author}}", "{{logbook}}"].map((x, i) => [i ? ", " : "", h("code", {}, x)]), ". ",
       "Changes are saved with Review & save, like every other setting."));
 }
@@ -994,8 +1071,9 @@ function kvTable(E, rerender, inherit) {
     spec.textContent = o ? `${o.name} = ${o.spec}${o.desc ? " · " + o.desc : ""}` : keyInp.value.trim() ? "not in ELOG's option reference" : "";
     valInp.placeholder = inh ? `${inh.from}: ${inh.value}` : o ? o.spec : "Value";
   });
-  const scope = inherit ? (o) => o.scope !== "global" : () => true;
-  const catalogKeys = S.opts.list.filter((o) => !o.pattern && scope(o)).map((o) => o.name);
+  // a logbook offers what works in a logbook, [global] what works there (incl. defaults for all logbooks)
+  const scope = (o) => inScope(o, !inherit);
+  const catalogKeys = S.opts.list.filter((o) => !o.pattern && !o.deprecated && scope(o)).map((o) => o.name);
   const allKeys = [...new Set(catalogKeys.concat(E.items.map(([k]) => k)))].sort((a, b) => a.localeCompare(b));
   return h("div", { class: "card" },
     h("table", { class: "kv" }, h("tbody", {}, E.items.map(([k, v], i) => {
@@ -1010,7 +1088,10 @@ function kvTable(E, rerender, inherit) {
           o ? (o.doc ? h("a", { class: "hint", href: o.doc, target: "_blank", rel: "noopener", title: "ELOG documentation" }, "?") : null)
             : isSuper() ? h("button", { class: "badge", title: "Not a known option. Click to register it as a custom option",
                 onclick: () => customOptionDialog({ name: splitCond(k)[1].trim() }) }, "?")
-              : h("span", { class: "badge", title: "Not in ELOG's option reference: check the spelling" }, "?"))),
+              : h("span", { class: "badge", title: "Not in ELOG's option reference: check the spelling" }, "?"),
+          o && !scope(o) ? h("span", { class: "badge warn", title: inherit ? "Only has an effect in [global]"
+            : "Belongs in a logbook: in [global] it applies to every logbook" }, inherit ? "[global] only" : "logbook only") : null,
+          o && o.deprecated ? h("span", { class: "badge", title: `Old name of '${o.deprecated}'; the Templates tab converts it` }, "old name") : null)),
         h("td", {}, h("input", { value: v, placeholder: inh ? `${inh.from}: ${inh.value}` : o ? o.spec : "",
           onchange: (e) => { E.items[i][1] = e.target.value.trim(); rerender(); } })),
         h("td", { style: "width:1%" }, h("button", { class: "link", style: "color:var(--danger)", title: "Delete setting",
@@ -1400,7 +1481,7 @@ function customOptionsCard() {
       h("tbody", {}, custom.map((o) => h("tr", {},
         h("td", {}, h("b", {}, o.name)),
         h("td", {}, (CUSTOM_TYPE_LABELS.find(([t]) => t === o.type) || [, o.type])[1], o.type === "enum" ? `: ${o.values.join(", ")}` : ""),
-        h("td", {}, o.scope === "global" ? "[global] only" : "anywhere"),
+        h("td", {}, SCOPE_LABEL[o.scope] || SCOPE_LABEL.any),
         h("td", {}, o.default || ""), h("td", { class: "muted" }, o.desc || ""),
         h("td", { style: "white-space:nowrap" },
           h("button", { class: "link", onclick: () => customOptionDialog(o) }, "Edit"), " ",
@@ -1428,8 +1509,8 @@ async function customOptionDialog(o) {
   const type = h("select", { onchange: () => (valuesRow.hidden = type.value !== "enum") },
     CUSTOM_TYPE_LABELS.map(([v, l]) => h("option", { value: v, selected: (o.type || "string") === v }, l)));
   valuesRow.hidden = type.value !== "enum";
-  const scope = h("select", {}, h("option", { value: "any", selected: o.scope !== "global" }, "logbooks and [global]"),
-    h("option", { value: "global", selected: o.scope === "global" }, "[global] only"));
+  const scope = h("select", {}, Object.entries(SCOPE_LABEL).map(([v, l]) =>
+    h("option", { value: v, selected: (o.scope || "any") === v }, l)));
   const def = h("input", { value: o.default || "", placeholder: "what ELOG does when it is not set" });
   const desc = h("input", { value: o.desc || "", placeholder: "short description shown next to the field" });
   const body = h("div", { class: "grid2" },

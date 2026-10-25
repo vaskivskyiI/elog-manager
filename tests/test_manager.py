@@ -452,6 +452,11 @@ FORK_OPTIONS = {  # option -> (scope, type) of the options added by the companio
     "Quick entry title": ("any", "string"), "Quick entry attributes": ("any", "list"),
     "Quick entry Bakeout": ("any", "list"), "Change note Position": ("any", "string"),
     "Empty option Position": ("any", "string"),
+    "Templates": ("any", "list"), "Template title": ("any", "string"), "Template attributes": ("any", "list"),
+    "Template attributes Cooldown": ("any", "list"), "Template text Cooldown": ("any", "string"),
+    "HTML editor language": ("any", "string"), "Views": ("any", "list"), "View Problems": ("any", "string"),
+    "Digest": ("any", "enum"), "Digest time": ("any", "number"), "Digest to": ("any", "list"),
+    "Watch config": ("global", "bool"),
 }
 
 
@@ -466,6 +471,11 @@ def test_fork_options_in_catalog():
     assert lookup("Custom page Status")["name"] == "Custom page <name>"
     assert lookup("Quick entry title")["name"] == "Quick entry title"
     assert lookup("Text template Tip exchange")["name"] == "Text template <name>"
+    assert lookup("Text template attributes X")["name"] == "Text template attributes <name>"
+    assert lookup("Template attributes")["name"] == "Template attributes"
+    assert lookup("Template attributes LN2 refilled")["name"] == "Template attributes <name>"
+    assert lookup("Quick entries")["deprecated"] == "Templates" and not lookup("Templates").get("deprecated")
+    assert check_value(lookup("Digest"), "monthly") and check_value(lookup("Digest time"), "7.5")
     assert lookup("HTML editor")["default"] == "TinyMCE" and lookup("Live updates")["default"] == "1"
     assert check_value(lookup("HTML editor"), "Quill") and not check_value(lookup("HTML editor"), "ckeditor")
     assert check_value(lookup("Resize images"), "1.5") and check_value(lookup("Summary length"), "long")
@@ -481,10 +491,12 @@ def test_fork_options_lint():
     c.global_.set("Manager URL", "/manage/")
     s = c.section("STM")
     for key in FORK_OPTIONS:
-        if key not in ("Modern selection page", "Manager URL", "Manager title", "Text templates", "Text template Cooldown"):
+        if key not in ("Modern selection page", "Manager URL", "Manager title", "Watch config") \
+                and not key.lower().startswith(("text template", "template", "quick entr")):
             s.set(key, {"bool": "1", "number": "200", "enum": "CKEditor"}.get(FORK_OPTIONS[key][1], "x"))
     s.set("Custom pages", "Status")
     s.set("Change note Position", "Moved from $old to $new")
+    s.set("Digest", "daily")
     s.set("Manager title", "Manager")
     issues = [i for i in lint(c) if i["section"] in ("STM", "global")]
     msgs = [i["message"] for i in issues]
@@ -498,52 +510,70 @@ def test_fork_options_lint():
     assert any("'Change note Nope' refers to 'Nope'" in m for m in msgs)
 
 
-def test_text_template_lint():
+def test_template_lint():
     c = ElogConfig(ref_text())
     s = c.section("STM")
-    s.set("Text templates", "Tip exchange, Cooldown")
-    s.set("Text template Tip exchange", "<h3>{{date}}</h3>")
-    s.set("Text template Old", "old.html")
+    s.set("Templates", "Tip exchange, Cooldown")
+    s.set("Template text Tip exchange", "<h3>{{date}}</h3>")
+    s.set("Template attributes Tip exchange", "Category=Hardware, Bias=1V")
+    s.set("Template text Old", "old.html")
     msgs = [i["message"] for i in lint(c) if i["section"] == "STM"]
-    assert "'Text templates' lists 'Cooldown', but 'Text template Cooldown' is not set" in msgs
-    assert "'Text template Old' is not offered because 'Old' is not in 'Text templates'" in msgs
-    assert not any("Tip exchange" in m for m in msgs)
+    assert "'Template text Old' is not offered because 'Old' is not in 'Templates'" in msgs
+    assert "'Template attributes Tip exchange' presets 'Bias', which is not an attribute of this logbook" in msgs
+    assert not any("Cooldown" in m for m in msgs)  # a template needs neither text nor presets
     # elogd looks up the list and each template in [global] when the logbook has none
-    c.global_.set("Text template Cooldown", "cooldown.html")
-    s.delete("Text templates")
-    c.global_.set("Text templates", "Tip exchange, Cooldown, Old")
-    assert not any("template" in i["message"] for i in lint(c) if i["section"] in ("STM", "global"))
+    s.delete("Templates")
+    c.global_.set("Templates", "Tip exchange, Cooldown, Old")
+    s.set("Template attributes Tip exchange", "Category=Hardware")
+    assert not any("emplate" in i["message"] for i in lint(c) if i["section"] in ("STM", "global"))
+    # the old names still work, the check points to the new ones
+    s.set("Quick entry Bakeout", "Category=Hardware")
+    msgs = [i["message"] for i in lint(c) if i["section"] == "STM"]
+    assert "'Quick entry Bakeout' is the old name of 'Template attributes Bakeout'; the Templates tab converts it" in msgs
+
+
+def test_option_scope_lint():
+    from elogmgr.options import in_scope, lookup
+    assert lookup("Subdir")["scope"] == "logbook" and lookup("Comment")["scope"] == "logbook"
+    assert in_scope(lookup("Attributes"), True) and in_scope(lookup("Attributes"), False)
+    assert not in_scope(lookup("Subdir"), True) and not in_scope(lookup("Watch config"), False)
+    c = ElogConfig(ref_text())
+    c.global_.set("Subdir", "data")
+    c.section("STM").set("Watch config", "0")
+    msgs = [i["message"] for i in lint(c)]
+    assert "'Subdir' belongs in a logbook section; in [global] it applies to every logbook" in msgs
+    assert "'Watch config' only has an effect in [global]" in msgs
 
 
 def test_template_editor_writes(client):
     """The ops the Templates tab sends: add, edit, rename, delete, all through preview + config check."""
     login(client, "bob")  # a logbook admin of STM
     st = client.get("/api/state").json
-    add = [{"op": "set", "section": "STM", "key": "Text templates", "value": "Tip exchange, Cooldown"},
-           {"op": "set", "section": "STM", "key": "Text template Tip exchange",
+    add = [{"op": "set", "section": "STM", "key": "Templates", "value": "Tip exchange, Cooldown"},
+           {"op": "set", "section": "STM", "key": "Template text Tip exchange",
             "value": "<h3>Tip exchange {{date}}</h3><p>Operator: {{author}}</p>"},
-           {"op": "set", "section": "STM", "key": "Text template Cooldown", "value": "templates/cooldown.html",
-            "after": "Text template Tip exchange"}]
+           {"op": "set", "section": "STM", "key": "Template text Cooldown", "value": "templates/cooldown.html",
+            "after": "Template text Tip exchange"}]
     dry = client.post("/api/apply", json={"etag": st["etag"], "ops": add, "dry_run": True}, headers=H).json
-    assert "+Text template Cooldown = templates/cooldown.html" in dry["diff"]
+    assert "+Template text Cooldown = templates/cooldown.html" in dry["diff"]
     assert not dry["blocking"] and not dry["new_issues"], dry["new_issues"]
     r = client.post("/api/apply", json={"etag": st["etag"], "ops": add}, headers=H)
     assert r.status_code == 200, r.json
     lines = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8")).section("STM").text().splitlines()
-    i = lines.index("Text templates = Tip exchange, Cooldown")
-    assert lines[i + 1:i + 3] == ["Text template Tip exchange = <h3>Tip exchange {{date}}</h3><p>Operator: {{author}}</p>",
-                                  "Text template Cooldown = templates/cooldown.html"]
+    i = lines.index("Templates = Tip exchange, Cooldown")
+    assert lines[i + 1:i + 3] == ["Template text Tip exchange = <h3>Tip exchange {{date}}</h3><p>Operator: {{author}}</p>",
+                                  "Template text Cooldown = templates/cooldown.html"]
     # rename Cooldown -> Cooldown 4K, edit (line breaks become spaces), delete Tip exchange
-    edit = [{"op": "delete_key", "section": "STM", "key": "Text template Cooldown"},
-            {"op": "delete_key", "section": "STM", "key": "Text template Tip exchange"},
-            {"op": "set", "section": "STM", "key": "Text templates", "value": "Cooldown 4K"},
-            {"op": "set", "section": "STM", "key": "Text template Cooldown 4K", "value": "<p>4K\n{{isodate}}</p>",
-             "after": "Text templates"}]
+    edit = [{"op": "delete_key", "section": "STM", "key": "Template text Cooldown"},
+            {"op": "delete_key", "section": "STM", "key": "Template text Tip exchange"},
+            {"op": "set", "section": "STM", "key": "Templates", "value": "Cooldown 4K"},
+            {"op": "set", "section": "STM", "key": "Template text Cooldown 4K", "value": "<p>4K\n{{isodate}}</p>",
+             "after": "Templates"}]
     r = client.post("/api/apply", json={"etag": r.json["etag"], "ops": edit}, headers=H)
     assert r.status_code == 200, r.json
     s = ElogConfig((client.tmp / "elogd.cfg").read_text(encoding="utf-8")).section("STM")
-    assert s.get("Text templates") == "Cooldown 4K" and s.get("Text template Cooldown 4K") == "<p>4K {{isodate}}</p>"
-    assert s.get("Text template Cooldown") is None and s.get("Text template Tip exchange") is None
+    assert s.get("Templates") == "Cooldown 4K" and s.get("Template text Cooldown 4K") == "<p>4K {{isodate}}</p>"
+    assert s.get("Template text Cooldown") is None and s.get("Template text Tip exchange") is None
     assert len(os.listdir(client.tmp / "state" / "backups")) >= 2  # a backup before each save
     # the config check still applies: a bad value of a fork option cannot be saved by a logbook admin
     bad = [{"op": "set", "section": "STM", "key": "HTML editor", "value": "Quill"}]

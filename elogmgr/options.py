@@ -37,6 +37,9 @@ GLOBAL_ONLY_SECTIONS = {"Global options", "Groups of logbooks", "Top groups", "M
                         "Kerberos authentication", "LDAP authentication", "PAM authentication"}
 GLOBAL_ONLY_NAMES = {"password file", "login expiration", "self register", "usr", "grp", "hosts allow",
                      "hosts deny", "max content length"}
+# Options that describe one logbook; in [global] they would apply to every logbook at once
+LOGBOOK_ONLY_NAMES = {"subdir", "comment", "hidden"}
+SCOPES = ("any", "global", "logbook")
 
 # Our own short descriptions; the rest link to the reference.
 DESCRIPTIONS = {
@@ -131,7 +134,7 @@ def official() -> list[dict]:
     for o in raw:
         key = norm(o["name"])
         scope = o.get("scope") or ("global" if o["section"] in GLOBAL_ONLY_SECTIONS or key in GLOBAL_ONLY_NAMES
-                                   else "any")
+                                   else "logbook" if key in LOGBOOK_ONLY_NAMES else "any")
         if key in seen:  # documented twice (e.g. Page title: start page and entry page) -> valid in both
             if scope == "any":
                 seen[key]["scope"] = "any"
@@ -175,7 +178,7 @@ def _normalize_custom(o: dict) -> dict:
         "section": "Custom options", "doc": None,
         "default": (str(o["default"]).strip() or None) if o.get("default") is not None else None,
         "type": typ, "values": values,
-        "scope": "global" if o.get("scope") == "global" else "any",
+        "scope": o.get("scope") if o.get("scope") in SCOPES else "any",
         "pattern": "<" in name,
         "desc": str(o.get("desc") or "").strip(),
         "custom": True,
@@ -209,6 +212,11 @@ def save_custom_options(items: list[dict]) -> None:
         json.dump(keep, f, indent=1, ensure_ascii=False)
     os.replace(tmp, path)
     _custom["mtime"] = None  # re-read on next use
+
+
+def in_scope(opt: dict, is_global: bool) -> bool:
+    """Whether the option has an effect in [global] (is_global) or in a logbook section."""
+    return opt["scope"] == "any" or opt["scope"] == ("global" if is_global else "logbook")
 
 
 def catalog() -> list[dict]:

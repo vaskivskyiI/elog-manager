@@ -91,7 +91,7 @@ button:disabled { opacity: .5; cursor: default; }
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--info-soft); color: var(--muted); white-space: nowrap; }
 button.badge { border: none; cursor: pointer; font: inherit; font-size: 11px; }
 button.badge:hover { background: var(--accent-soft); color: var(--accent); }
-.badge.lock { background: var(--warn-soft); color: var(--warn); }
+.badge.lock, .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.err { background: var(--danger-soft); color: var(--danger); }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }
 .pending { background: var(--warn-soft); border: 1px solid var(--warn); border-radius: var(--radius);

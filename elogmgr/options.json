@@ -1558,8 +1558,9 @@
   "doc": null,
   "default": null,
   "scope": "any",
-  "desc": "Templates offered in the editor's Templates menu",
-  "source": "fork"
+  "desc": "Old name of 'Templates'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Templates"
  },
  {
   "name": "Text template <name>",
@@ -1568,8 +1569,9 @@
   "doc": null,
   "default": null,
   "scope": "any",
-  "desc": "Template content: file in the logbook directory, or inline HTML",
-  "source": "fork"
+  "desc": "Old name of 'Template text <name>'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Template text <name>"
  },
  {
   "name": "Custom pages",
@@ -1608,18 +1610,20 @@
   "doc": null,
   "default": null,
   "scope": "any",
-  "desc": "One-click entries offered on the list page",
-  "source": "fork"
+  "desc": "Old name of 'Templates'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Templates"
  },
  {
   "name": "Quick entry title",
   "spec": "<string>",
   "section": "Fork options",
   "doc": null,
-  "default": "Quick entry",
+  "default": null,
   "scope": "any",
-  "desc": "Label of the quick entry menu",
-  "source": "fork"
+  "desc": "Old name of 'Template title'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Template title"
  },
  {
   "name": "Quick entry attributes",
@@ -1628,8 +1632,9 @@
   "doc": null,
   "default": null,
   "scope": "any",
-  "desc": "Attr=Value presets for all quick entries",
-  "source": "fork"
+  "desc": "Old name of 'Template attributes'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Template attributes"
  },
  {
   "name": "Quick entry <name>",
@@ -1638,8 +1643,9 @@
   "doc": null,
   "default": null,
   "scope": "any",
-  "desc": "Attr=Value presets for this quick entry; Subject defaults to the name",
-  "source": "fork"
+  "desc": "Old name of 'Template attributes <name>'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Template attributes <name>"
  },
  {
   "name": "Change note <attribute>",
@@ -1659,6 +1665,138 @@
   "default": null,
   "scope": "any",
   "desc": "Label of the empty choice of the attribute's drop-down",
+  "source": "fork"
+ },
+ {
+  "name": "Templates",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Menu 'New from template': new entries with preset fields and/or a text",
+  "source": "fork"
+ },
+ {
+  "name": "Template title",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": "New from template",
+  "scope": "any",
+  "desc": "Title of the template menu",
+  "source": "fork"
+ },
+ {
+  "name": "Template attributes",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Field presets of every template, e.g. Category=Maintenance",
+  "source": "fork"
+ },
+ {
+  "name": "Template attributes <name>",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Field presets of one template, e.g. Subject=Cooldown {{date}}; Subject defaults to the name",
+  "source": "fork"
+ },
+ {
+  "name": "Template text <name>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Text of a template: inline HTML or a file in the logbook directory; also in the editor's Templates menu",
+  "source": "fork"
+ },
+ {
+  "name": "Text template attributes <name>",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Old name of 'Template attributes <name>'; still read by ELOG",
+  "source": "fork",
+  "deprecated": "Template attributes <name>"
+ },
+ {
+  "name": "HTML editor language",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Language pack of the editor, e.g. sl_SI (default: from Language)",
+  "source": "fork"
+ },
+ {
+  "name": "Views",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Shared list views in the 'Views' menu",
+  "source": "fork"
+ },
+ {
+  "name": "View <name>",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Query of a view, e.g. Category=^Problem$&mode=summary",
+  "source": "fork"
+ },
+ {
+  "name": "Digest",
+  "spec": "daily|weekly",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "E-mail with the new entries of the last day or week (weekly: Mondays)",
+  "source": "fork"
+ },
+ {
+  "name": "Digest time",
+  "spec": "<number>",
+  "section": "Fork options",
+  "doc": null,
+  "default": "7",
+  "scope": "any",
+  "desc": "Hour of the day the digest is sent (server time)",
+  "source": "fork",
+  "integer": true
+ },
+ {
+  "name": "Digest to",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "Recipients of the digest",
+  "source": "fork"
+ },
+ {
+  "name": "Watch config",
+  "spec": "0|1",
+  "section": "Fork options",
+  "doc": null,
+  "default": "1",
+  "scope": "global",
+  "desc": "Reload elogd.cfg by itself when the file changes (checked every 30 s)",
   "source": "fork"
  }
 ]

@@ -11,7 +11,7 @@ accounts.
 | Page | Purpose |
 |------|---------|
 | **Logbooks** | Tree of groups and subgroups, in the same order as on ELOG's start page. Reorder logbooks inside a group and groups among their siblings with ↑ ↓ or by dragging. Drag logbooks between groups (Ctrl+drag copies, since a logbook can be in several groups). Drag a group by its title into another group to nest it, or onto *Not in any group* to make it top-level again. *+ Subgroup* creates a nested group. *New logbook* copies settings from a template, suggests the next name in a series (`np011`) and adds the logbook to its group. Tick logbooks to **bulk edit** a setting across all of them. |
-| **Logbook editor** | *Overview* (comment, titles, paging, list columns, quick filters, groups) · *Access* (login and admin users, with autocomplete from the password file) · *Attributes* (table: input type, options, required, locked, extendable, preset, comment; renaming an attribute updates every setting that refers to it) · *Templates* (the text templates of ELOG's HTML editor: add, rename, reorder, delete, edit inline HTML or a file name) · *All settings* (key/value grid) · *Raw text*. |
+| **Logbook editor** | *Overview* (comment, titles, paging, list columns, quick filters, groups) · *Access* (login and admin users, with autocomplete from the password file) · *Attributes* (table: input type, options, required, locked, extendable, preset, comment; renaming an attribute updates every setting that refers to it) · *Templates* (the "New from template" menu: per template the preset fields and an optional text, inline HTML or a file name; add, rename, reorder, delete; converts the old Quick entries / Text templates settings) · *All settings* (key/value grid) · *Raw text*. |
 | **Users & access** | Pick a user to see every logbook they can open or administer, and toggle access with checkboxes. *Copy access from…* onboards a new person like an existing one. *Replace with…* fixes typos across all logbooks. Names in the config that do not match an account are listed separately. Managers also create, edit, deactivate and delete ELOG accounts and set passwords (see *Accounts*). |
 | **My account** | Click your name in the top bar to change your own full name, e-mail and password. |
 | **Issues** | Linter: invalid option names (e.g. `extendable attributes`), groups that point to missing logbooks, users that do not exist, attributes referenced but not defined, malformed styles, duplicates. Many issues have a one-click fix. |
@@ -29,19 +29,26 @@ until you confirm.
 
 **Option catalog.** `elogmgr/options.json` lists the 210 options of ELOG's
 [option reference](https://elog.psi.ch/elog/config.html): value syntax, type,
-default, whether the option only works in `[global]`, and a link to the
-documentation entry. It also lists the options added by the companion ELOG
-fork (`Modern selection page`, `Manager URL`, `Manager title`, `HTML editor`,
-`Summary length`, `Show admin`, `Live updates`, `Resize images`, `Text
-templates`, `Text template <name>`, `Custom pages`, `Custom page <name>`,
-`Custom page title <name>`, `Quick entries`, `Quick entry title`, `Quick entry
-attributes`, `Quick entry <name>`, `Change note <attribute>`, `Empty option
-<attribute>`), marked `"source": "fork"`. The editors use it to suggest option names, show a
-matching input (yes/no, choice list, number, text), and show what applies when
-a field is empty, as placeholder text: the `[global]` value (`global: 40`),
-otherwise ELOG's default (`default: 20`). `tools/build_options.py` rebuilds the
-catalog from the reference and keeps the fork's entries; the descriptions
-are our own short summaries.
+default, where the option works, and a link to the documentation entry. It
+also lists the options added by the companion ELOG fork (start page,
+editor, live updates, templates, custom pages, views, e-mail digest, change
+notes, config watching ...), marked `"source": "fork"`; old option names the
+fork still reads are marked `"deprecated"` with their new name.
+
+Each option has a scope: `global` (only in `[global]`, e.g. `Password file`,
+`Watch config`), `logbook` (describes one logbook, e.g. `Subdir`, `Comment`,
+`Hidden`) or `any` (in a logbook, or in `[global]` as the default for all
+logbooks). The logbook editors suggest only options that work in a logbook,
+the global editor only those that work in `[global]`; a setting in the wrong
+place is marked in the table and reported by the config check.
+
+The editors use the catalog to suggest option names, show a matching input
+(yes/no, choice list, number, text), and show what applies when a field is
+empty, as placeholder text: the `[global]` value (`global: 40`), otherwise
+ELOG's default (`default: 20`). `tools/build_options.py` rebuilds the catalog
+from the reference and keeps the fork's entries; the descriptions are our own
+short summaries. New options of the fork are added to the `"source": "fork"`
+entries of `options.json` (and to `FORK_OPTIONS` in the tests).
 
 **Custom options.** Site-specific or undocumented keys (for example
 `Show banner`) are reported as "not in ELOG's option reference". A manager can

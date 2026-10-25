@@ -5,7 +5,7 @@ import re
 
 from .elogcfg import (ATTR_LIST_KEYS, BUILTIN_ATTRS, ElogConfig, attribute_key_target, join_list, norm,
                       split_list, strip_condition)
-from .options import check_value, lookup
+from .options import check_value, in_scope, lookup
 
 # Keys that look plausible but are not ELOG options -> the right spelling
 MISSPELLED = {
@@ -116,8 +116,16 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                 problem = check_value(opt, v)
                 if problem:
                     issues.append(_issue("error", s.name, f"'{k}' {problem}", key=k))
-                if not is_global and opt["scope"] == "global":
-                    issues.append(_issue("warning", s.name, f"'{k}' only has an effect in [global]", key=k))
+                if not in_scope(opt, is_global):
+                    issues.append(_issue("warning", s.name, f"'{k}' only has an effect in [global]" if not is_global
+                                         else f"'{k}' belongs in a logbook section; in [global] it applies to "
+                                              "every logbook", key=k))
+                if opt.get("deprecated"):
+                    new, name = opt["deprecated"], " ".join(bare.split())
+                    if "<" in new:  # "Text template Cooldown" -> "Template text Cooldown"
+                        new = new.split("<")[0] + name[len(opt["name"].split("<")[0]):]
+                    issues.append(_issue("info", s.name, f"'{name}' is the old name of '{new}'; "
+                                                         "the Templates tab converts it", key=k))
 
             if nk.startswith("style ") and v:
                 for decl in [d.strip() for d in v.split(";") if d.strip()]:
@@ -157,6 +165,7 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                     option_tags.update(re.findall(r"\{([^}]*)\}", v))
 
         issues += named_list_issues(cfg, s, is_global)
+        issues += template_issues(cfg, s, is_global)
         unused = sorted(t for t in option_tags if t and t not in cond_used)
         if unused:
             issues.append(_issue("info", s.name, "Option tags {" + ",".join(unused) + "} are set but no "
@@ -198,6 +207,43 @@ def named_list_issues(cfg: ElogConfig, sec, is_global: bool) -> list[dict]:
             if norm(name) not in listed:
                 issues.append(_issue("info", sec.name, f"'{k}' is not offered because '{name}' is not in "
                                                        f"'{list_key}'", key=k))
+    return issues
+
+
+# Templates = A, B with optional "Template text A" and "Template attributes A" (both may be absent: the
+# template then only opens a new entry with Subject = its name)
+TEMPLATE_PREFIXES = ("Template text", "Template attributes")
+PRESET_KEYS = ("template attributes", "quick entry attributes", "template attributes ", "quick entry ",
+               "text template attributes ")
+
+
+def template_issues(cfg: ElogConfig, sec, is_global: bool) -> list[dict]:
+    """Logbook checks only, like named_list_issues."""
+    issues = []
+    if is_global:
+        return issues
+    own = sec.get("Templates") is not None
+    listed = {norm(n) for n in (sec if own else cfg.global_).get_list("Templates")}
+    attrs = {a.lower() for a in split_list(_effective(cfg, sec, "Attributes") or "")}
+    for k, v in sec.items():
+        cond, bare = strip_condition(k)
+        nk = norm(bare)
+        if cond:
+            continue
+        for prefix in TEMPLATE_PREFIXES:
+            p = norm(prefix) + " "
+            if nk.startswith(p):
+                name = " ".join(bare.split())[len(prefix) + 1:]
+                if norm(name) not in listed:
+                    issues.append(_issue("info", sec.name, f"'{k}' is not offered because '{name}' is not in "
+                                                           "'Templates'", key=k))
+        # presets name fields of this logbook
+        if (nk in ("template attributes", "quick entry attributes") or nk.startswith(PRESET_KEYS[2:]))                 and not nk.startswith("quick entry title") and attrs:
+            for pair in split_list(v or ""):
+                field = pair.split("=", 1)[0].strip()
+                if "=" in pair and field.lower() not in attrs:
+                    issues.append(_issue("warning", sec.name, f"'{k}' presets '{field}', which is not an "
+                                                              "attribute of this logbook", key=k))
     return issues
 
 
