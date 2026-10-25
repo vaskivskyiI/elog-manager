@@ -1490,6 +1490,16 @@
   "source": "fork"
  },
  {
+  "name": "AI URL",
+  "spec": "<URL>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "global",
+  "desc": "ELOG AI: loads its widget on logbook pages and shows an AI button on the start page",
+  "source": "fork"
+ },
+ {
   "name": "Manager title",
   "spec": "<string>",
   "section": "Fork options",

@@ -443,7 +443,7 @@ def test_rename_keeps_data_dir(client):
 
 
 FORK_OPTIONS = {  # option -> (scope, type) of the options added by the companion ELOG fork
-    "Modern selection page": ("global", "bool"), "Manager URL": ("global", "string"),
+    "Modern selection page": ("global", "bool"), "Manager URL": ("global", "string"), "AI URL": ("global", "string"),
     "Manager title": ("global", "string"), "HTML editor": ("any", "enum"), "Summary length": ("any", "number"),
     "Show admin": ("any", "bool"), "Live updates": ("any", "bool"), "Resize images": ("any", "number"),
     "Text templates": ("any", "list"), "Text template Cooldown": ("any", "string"),
