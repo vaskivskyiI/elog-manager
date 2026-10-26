@@ -1490,6 +1490,106 @@
   "source": "fork"
  },
  {
+  "name": "AI context",
+  "spec": "<string>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: notes for the AI about this logbook (what matters, what is routine), or a .txt/.md file in the logbook dir; in [global] for all logbooks",
+  "source": "fork"
+ },
+ {
+  "name": "AI related",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "logbook",
+  "desc": "ELOG AI: related logbooks (names or wildcards such as np*), used both ways, e.g. an instrument and its experiments",
+  "source": "fork"
+ },
+ {
+  "name": "AI track",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "logbook",
+  "desc": "ELOG AI: attributes whose history is tracked per item (e.g. Carousel, MP); default: all that change",
+  "source": "fork"
+ },
+ {
+  "name": "AI alerts",
+  "spec": "0|1",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: alert when a numeric reading is far from the usual or a problem stays open",
+  "source": "fork"
+ },
+ {
+  "name": "AI alerts to",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: e-mail addresses or ELOG logins for alerts (default: the logbook's admins)",
+  "source": "fork"
+ },
+ {
+  "name": "AI alert open days",
+  "spec": "<days>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: days after which an open problem raises an alert (default 7)",
+  "source": "fork"
+ },
+ {
+  "name": "AI handover",
+  "spec": "0|1|daily",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "logbook",
+  "desc": "ELOG AI: write a handover of this (instrument) logbook every morning",
+  "source": "fork"
+ },
+ {
+  "name": "AI handover to",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "logbook",
+  "desc": "ELOG AI: e-mail the morning handover to these addresses or logins",
+  "source": "fork"
+ },
+ {
+  "name": "AI digest",
+  "spec": "daily|weekly|monthly",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: e-mail the AI summary of each day, week or month",
+  "source": "fork"
+ },
+ {
+  "name": "AI digest to",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: recipients of the AI summary (default: Digest to, else the admins)",
+  "source": "fork"
+ },
+ {
   "name": "AI URL",
   "spec": "<URL>",
   "section": "Fork options",

@@ -443,7 +443,7 @@ def test_rename_keeps_data_dir(client):
 
 
 FORK_OPTIONS = {  # option -> (scope, type) of the options added by the companion ELOG fork
-    "Modern selection page": ("global", "bool"), "Manager URL": ("global", "string"), "AI URL": ("global", "string"),
+    "Modern selection page": ("global", "bool"), "Manager URL": ("global", "string"), "AI URL": ("global", "string"), "AI context": ("any", "string"), "AI related": ("logbook", "list"), "AI track": ("logbook", "list"), "AI alerts": ("any", "bool"), "AI digest": ("any", "enum"),
     "Manager title": ("global", "string"), "HTML editor": ("any", "enum"), "Summary length": ("any", "number"),
     "Show admin": ("any", "bool"), "Live updates": ("any", "bool"), "Resize images": ("any", "number"),
     "Text templates": ("any", "list"), "Text template Cooldown": ("any", "string"),
@@ -494,6 +494,7 @@ def test_fork_options_lint():
         if key not in ("Modern selection page", "Manager URL", "Manager title", "Watch config") \
                 and not key.lower().startswith(("text template", "template", "quick entr")):
             s.set(key, {"bool": "1", "number": "200", "enum": "CKEditor"}.get(FORK_OPTIONS[key][1], "x"))
+    s.set("AI digest", "weekly")
     s.set("Custom pages", "Status")
     s.set("Change note Position", "Moved from $old to $new")
     s.set("Digest", "daily")
