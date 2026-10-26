@@ -1590,6 +1590,16 @@
   "source": "fork"
  },
  {
+  "name": "AI run id",
+  "spec": "<list>",
+  "section": "Fork options",
+  "doc": null,
+  "default": null,
+  "scope": "any",
+  "desc": "ELOG AI: attribute(s) that identify a run, e.g. RunN or File (default: a run-number attribute, else File)",
+  "source": "fork"
+ },
+ {
   "name": "AI URL",
   "spec": "<URL>",
   "section": "Fork options",
