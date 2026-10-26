@@ -457,6 +457,7 @@ FORK_OPTIONS = {  # option -> (scope, type) of the options added by the companio
     "HTML editor language": ("any", "string"), "Views": ("any", "list"), "View Problems": ("any", "string"),
     "Digest": ("any", "enum"), "Digest time": ("any", "number"), "Digest to": ("any", "list"),
     "Watch config": ("global", "bool"),
+    "Persistent sessions": ("global", "bool"),
 }
 
 
