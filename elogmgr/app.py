@@ -12,7 +12,7 @@ from functools import wraps
 from flask import Flask, abort, jsonify, request, send_from_directory, session
 
 from .accounts import AccountStore
-from .elogpwd import AccountError, CreateUser, DeleteUser, SetPassword, UpdateUser
+from .elogpwd import AccountError, CreateUser, DeleteUser, SetPassword, UpdateUser, find_account
 from .elogcfg import ElogConfig, Line, join_list, norm, strip_condition
 from .lint import author_problem, ensure_author, lint
 from . import options as options_mod
@@ -66,14 +66,16 @@ def create_app(settings: dict | None = None) -> Flask:
     # super (manager): [global] Admin user - everything
     # logbook_admin: in some logbook's Admin user - those logbooks, plus creating new ones
     # user: any other ELOG account - can create logbooks and becomes their admin
+    # user names are not case sensitive, like in elogd
     def managers(cfg: ElogConfig) -> set[str]:
-        return set(cfg.global_.get_list("Admin user"))
+        return {a.lower() for a in cfg.global_.get_list("Admin user")}
 
     def admin_logbooks(cfg: ElogConfig, user: str) -> list[str]:
-        return [s.name for s in cfg.logbook_sections() if user in s.get_list("Admin user")]
+        return [s.name for s in cfg.logbook_sections()
+                if user.lower() in (a.lower() for a in s.get_list("Admin user"))]
 
     def role_of(cfg: ElogConfig, user: str) -> str:
-        if user in managers(cfg):
+        if user.lower() in managers(cfg):
             return "super"
         return "logbook_admin" if admin_logbooks(cfg, user) else "user"
 
@@ -120,14 +122,13 @@ def create_app(settings: dict | None = None) -> Flask:
             return jsonify(error="Too many failed attempts, try again in 10 minutes"), 429
         data = request.get_json(force=True, silent=True) or {}
         name, pw = str(data.get("user", "")).strip(), str(data.get("password", ""))
-        users = store.users()
-        u = users.get(name)
+        u = find_account(store.users(), name)
         if not u or not u.check(pw):
             failures[ip].append(now)
             return jsonify(error="Wrong user name or password"), 401
         session.clear()
         session.permanent = True
-        session["user"] = name
+        session["user"] = u.name  # as written in the password file, whatever case was typed
         failures.pop(ip, None)
         return jsonify(ok=True)
 
@@ -508,7 +509,7 @@ def create_app(settings: dict | None = None) -> Flask:
         """Managers manage every account; everyone may edit their own name, e-mail and password."""
         data = request.get_json(force=True, silent=True) or {}
         op, name = data.get("op"), str(data.get("name", "")).strip()
-        is_super, is_self = role == "super", name == user
+        is_super, is_self = role == "super", name.lower() == user.lower()
         text = lambda k: None if data.get(k) is None else str(data[k]).strip()  # noqa: E731
         try:
             if op == "create":

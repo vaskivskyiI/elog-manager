@@ -203,11 +203,24 @@ class AccountError(ValueError):
 
 
 def find_user(root: ET.Element, name: str) -> ET.Element | None:
+    """The account called `name`. User names are not case sensitive (as in elogd): an exact match
+    wins, else the first one that differs only in case."""
+    found = None
     for u in root.iter("user"):
         el = u.find("name")
-        if el is not None and from_file((el.text or "").strip()) == name:
+        n = from_file((el.text or "").strip()) if el is not None else ""
+        if n == name:
             return u
-    return None
+        if found is None and n.lower() == name.lower():
+            found = u
+    return found
+
+
+def find_account(users: dict, name: str):
+    """Entry of load_users() for `name` in any case, exact spelling first."""
+    if name in users:
+        return users[name]
+    return next((u for n, u in users.items() if n.lower() == name.lower()), None)
 
 
 def _set_child(u: ET.Element, tag: str, value: str, after: str | None = None) -> None:
@@ -255,8 +268,11 @@ class CreateUser(Change):
         self.description = f"create account {name}"
 
     def apply(self, root):
-        if find_user(root, self.name) is not None:
-            raise AccountError(f"An account '{self.name}' already exists")
+        other = find_user(root, self.name)
+        if other is not None:
+            existing = from_file((other.findtext("name") or "").strip())
+            raise AccountError(f"An account '{existing}' already exists"
+                               + ("" if existing == self.name else " (user names are not case sensitive)"))
         u = ET.SubElement(root, "user")  # same fields and order as elogd's own "new user"
         ET.SubElement(u, "name").text = to_file(self.name, self.charset)
         pw = ET.SubElement(u, "password", {"encoding": "SHA256"})

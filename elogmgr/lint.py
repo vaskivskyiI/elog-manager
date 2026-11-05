@@ -136,9 +136,9 @@ def lint(cfg: ElogConfig, users: dict | None = None) -> list[dict]:
                 for u in split_list(v):
                     if u in users:
                         continue
-                    if u.lower() in user_lower:
-                        issues.append(_issue("warning", s.name, f"'{u}' in '{k}' differs in case from the "
-                                                                f"account '{user_lower[u.lower()]}'", key=k))
+                    if u.lower() in user_lower:  # works: user names are not case sensitive
+                        issues.append(_issue("info", s.name, f"'{u}' in '{k}' is written differently from the "
+                                                             f"account '{user_lower[u.lower()]}'", key=k))
                     else:
                         issues.append(_issue("error", s.name, f"User '{u}' in '{k}' does not exist in the "
                                                               "password file", key=k))

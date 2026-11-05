@@ -59,7 +59,7 @@ def test_lint_finds_known_problems():
     assert any("tr003" in m for m in msgs)
     assert any("'extendable attributes' is not an ELOG option" in m for m in msgs)
     assert any("'alcie'" in m for m in msgs)
-    assert any("'Bob'" in m and "case" in m for m in msgs)
+    assert any("'Bob'" in m and "written differently" in m for m in msgs)  # works, only a note
     assert not any("refers to" in m for m in msgs), msgs  # no false attribute warnings
 
 
@@ -92,6 +92,9 @@ def test_login_roles(client):
     assert client.get("/api/me").json["role"] == "logbook_admin"
     assert login(client, "alice").status_code == 200
     assert client.get("/api/me").json["role"] == "super"
+    # user names are not case sensitive (like elogd); the session keeps the account's own spelling
+    assert login(client, "ALICE").status_code == 200
+    assert client.get("/api/me").json == {"user": "alice", "role": "super"}
 
 
 def test_create_logbook_in_group_with_template(client):
@@ -310,6 +313,8 @@ def test_manager_creates_account_like_elogd(client):
     assert [c.tag for c in u] == ["name", "password", "full_name", "last_logout", "last_activity", "email",
                                   "inactive", "email_notify"]
     assert account(client, op="create", name="dora", password="longenough").status_code == 400  # exists
+    r = account(client, op="create", name="Dora", password="longenough")
+    assert r.status_code == 400 and "not case sensitive" in r.json["error"]
     assert login(client, "dora").status_code == 401  # password is not "demo"
     assert client.post("/api/login", json={"user": "dora", "password": "longenough"}).status_code == 200
     assert client.get("/api/state").json["me"]["account"]["full_name"] == "Dóra Čuk"
