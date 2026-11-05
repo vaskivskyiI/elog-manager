@@ -130,6 +130,7 @@ async function commit(ops, summary, extra = {}) {
 async function reload() {
   if (!S.opts) await loadOptions();
   S.state = await api("GET", apiUrl("/api/state"));
+  elogBack();
   document.body.classList.toggle("super", isSuper());
   $("#whoami").textContent = `${S.state.me.name} · ${ROLE_LABEL[S.state.me.role] || S.state.me.role}`;
   const n = S.state.issues.filter((i) => i.level === "error").length;
@@ -827,7 +828,7 @@ function viewLogbook(r) {
       h("h2", { style: "margin:0" }, lb.name),
       lb.groups.map((g) => h("span", { class: "badge" }, g)),
       h("span", { class: "spacer" }),
-      elogUrl ? h("a", { href: elogUrl, target: "_blank", rel: "noopener" }, "Open in ELOG ↗") : null,
+      elogUrl ? h("a", { href: elogUrl, title: "This logbook in ELOG" }, "Open in ELOG") : null,
       isSuper() ? [
         h("button", { onclick: () => newLogbook({ template: lb.name, group: lb.groups[0] }) }, "Clone"),
         h("button", { onclick: () => renameLogbook(lb.name) }, "Rename"),
@@ -1197,7 +1198,7 @@ function viewUsers(r) {
       const open = login.length === 0;
       const cell = (kind, list) => {
         const key = `${lb.name}\u0000${kind}`;
-        const cur = list.includes(sel);
+        const cur = list.some((x) => x.toLowerCase() === sel.toLowerCase());
         const val = key in pend ? pend[key] : cur;
         return h("td", { class: "c" }, h("input", { type: "checkbox", checked: val || (kind === "login" && open),
           disabled: !lb.editable || (kind === "login" && open),
@@ -1233,6 +1234,7 @@ function viewUsers(r) {
         isSuper() && !u ? h("button", { class: "primary", onclick: () => newAccount(sel) }, "Create account…") : null,
         h("button", { onclick: () => copyAccess(sel) }, "Copy access from…"),
         h("button", { onclick: () => replaceUser(sel) }, u ? "Rename in config…" : "Replace with…"),
+        u ? h("button", { onclick: () => addUserEverywhere(sel) }, "Add to all logbooks…") : null,
         h("button", { class: "danger", onclick: () => removeUserEverywhere(sel) }, "Remove from all")),
       pendCount ? h("div", { class: "pending" }, h("b", {}, `${pendCount} unsaved change(s)`), h("span", { class: "spacer" }),
         h("button", { onclick: () => { S.userPending = {}; render(); } }, "Discard"),
@@ -1395,6 +1397,35 @@ async function replaceUser(old) {
     { op: "list_add", section, key, items: [inp.value.trim()] }]);
   if (await commit(ops, `Replace user '${old}' → '${inp.value.trim()}'`)) go("users", inp.value.trim());
 }
+/** Access to every logbook this manager may edit, optionally as admin. Logbooks without a Login user list are
+ *  open to all accounts and stay so; an empty Admin user list gets the [global] admins first, because a list in
+ *  the logbook replaces [global] for it. */
+async function addUserEverywhere(user) {
+  const lc = user.toLowerCase();
+  const has = (lb, key) => splitList(getItem(lb.items, key)).some((x) => x.toLowerCase() === lc);
+  const editable = S.state.logbooks.filter((lb) => lb.editable);
+  const restricted = editable.filter((lb) => splitList(getItem(lb.items, "Login user")).length);
+  const missing = restricted.filter((lb) => !has(lb, "Login user"));
+  const open = editable.length - restricted.length;
+  const admin = h("input", { type: "checkbox" });
+  const body = h("div", {},
+    h("p", {}, missing.length ? `${user} gets access to ${missing.length} more logbook(s): ${missing.map((lb) => lb.name).join(", ")}.`
+      : `${user} can already open every logbook you manage.`),
+    open ? h("p", { class: "muted" }, `${open} logbook(s) have no Login user list: every account can open them already.`) : null,
+    h("label", { class: "inline" }, admin, "Also make them admin of every logbook"));
+  if (!await modal(`Add '${user}' to all logbooks`, body, [{ label: "Preview" }])) return;
+  const ops = missing.map((lb) => ({ op: "list_add", section: lb.name, key: "Login user", items: [user] }));
+  if (admin.checked) {
+    const globalAdmins = splitList(globalVal("Admin user"));
+    for (const lb of editable.filter((l) => !has(l, "Admin user"))) {
+      const own = splitList(getItem(lb.items, "Admin user"));
+      ops.push({ op: "list_add", section: lb.name, key: "Admin user", items: own.length ? [user] : [...globalAdmins, user] });
+    }
+  }
+  if (!ops.length) return toast("Nothing to change");
+  await commit(ops, `Add '${user}' to all logbooks`);
+}
+
 async function removeUserEverywhere(user) {
   const refs = lbsReferencing(user);
   if (!refs.length) return toast("Nothing to remove");
@@ -1562,7 +1593,22 @@ $("#reload").addEventListener("click", async () => {
 });
 $("#logout").addEventListener("click", async () => { await api("POST", apiUrl("/api/logout")); S.state = null; showLogin(); });
 
+/** "<- ELOG" returns to the ELOG page the user came from (e.g. a logbook's Manager link), else to ELOG's start
+ *  page. The page is remembered for the browser tab, so it survives navigating inside the manager. */
+function elogBack() {
+  try {
+    const r = document.referrer;
+    if (r && new URL(r).origin === location.origin && !r.startsWith(location.origin + location.pathname))
+      sessionStorage.setItem("elog-back", r);
+  } catch (e) { /* no storage */ }
+  let back = null;
+  try { back = sessionStorage.getItem("elog-back"); } catch (e) { /* no storage */ }
+  const href = back || (S.state && S.state.elog_url) || "../";
+  for (const a of document.querySelectorAll(".elog-back")) a.href = href;
+}
+
 async function start() {
+  elogBack();
   const me = await api("GET", apiUrl("/api/me"));
   if (!me.user) return showLogin();
   $("#login").hidden = true;

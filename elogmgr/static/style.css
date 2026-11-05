@@ -25,6 +25,7 @@ code, pre, textarea.code { font-family: var(--mono); font-size: 12.5px; }
 /* top bar */
 header#topbar { display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 52px;
   background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.elog-back { white-space: nowrap; font-weight: 600; text-decoration: none; }
 .brand { font-weight: 700; font-size: 16px; } .brand span, .login h1 span { color: var(--accent); font-weight: 500; }
 nav { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
 .who button#reload { padding: 3px 10px; margin-right: 8px; }
